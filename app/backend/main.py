@@ -3,12 +3,22 @@ from typing import List
 from sqlalchemy.orm import Session
 from .models import TaskCreate, TaskUpdate, TaskResponse
 from .database import Task, get_db  # Assuming TaskBase is renamed to Task for clarity
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="TODO API",
     description="REST API for managing tasks",
     version="1.0.0"
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 
 @app.get(

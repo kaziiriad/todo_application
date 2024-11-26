@@ -1,0 +1,3 @@
+[submodule "app/todo-frontend"]
+	path = app/todo-frontend
+	url = https://github.com/kaziiriad/todo-frontend
