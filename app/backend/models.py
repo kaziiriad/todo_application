@@ -3,13 +3,10 @@ from pydantic import BaseModel
 from datetime import datetime
 
 class TaskModel(BaseModel):
-    id: int
     title: str
     description: Optional[str] = None
     completed: bool = False
     due_date: Optional[datetime] = None
-    created_at: datetime = datetime.now()
-    updated_at: datetime = datetime.now()
 
 class TaskCreate(TaskModel):
     pass

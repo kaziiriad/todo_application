@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from typing import List
 from sqlalchemy.orm import Session
-from .models import TaskCreate, TaskUpdate, TaskResponse
-from .database import Task, get_db  # Assuming TaskBase is renamed to Task for clarity
+from app.backend.models import TaskCreate, TaskUpdate, TaskResponse
+from app.backend.database import Task, get_db  # Assuming TaskBase is renamed to Task for clarity
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
