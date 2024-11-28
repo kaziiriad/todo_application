@@ -21,4 +21,9 @@ class TaskUpdate(BaseModel):
         from_attributes = True
 
 class TaskResponse(TaskModel):
-    pass
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

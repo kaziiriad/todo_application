@@ -1,24 +1,23 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from typing import List
 from sqlalchemy.orm import Session
-from app.backend.models import TaskCreate, TaskUpdate, TaskResponse
-from app.backend.database import Task, get_db  # Assuming TaskBase is renamed to Task for clarity
+from models import TaskCreate, TaskUpdate, TaskResponse
+from database import Task, get_db  # Assuming TaskBase is renamed to Task for clarity
 from fastapi.middleware.cors import CORSMiddleware
+import os
 
 app = FastAPI(
     title="TODO API",
     description="REST API for managing tasks",
     version="1.0.0"
 )
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],  
+    allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
-
 
 
 @app.get(
