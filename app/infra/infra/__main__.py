@@ -14,18 +14,21 @@ KEY_PAIR_NAME = 'MyNewKeyPair'
 
 USER_DATA = """
 #!/bin/bash
-sudo apt-get update
-sudo apt-get install -y docker.io docker-compose
-sudo usermod -aG docker ubuntu
-sudo systemctl start docker
-sudo systemctl enable docker
-newgrp docker
-mkdir -p /home/ubuntu/app
+# Install Docker
+sudo apt-get update -y
+sudo apt-get install -y docker.io
+sudo usermod -aG docker $(whoami)
 
-# Verify Docker is running
-sudo systemctl status docker
+sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Start Docker
+systemctl start docker
+systemctl enable docker
 
 # Create app directory
+mkdir -p /home/ubuntu/app
+
 """
 
 # lb_docker_compose = """
@@ -89,13 +92,13 @@ vpc_module.create_route_table_association( # associate private route table with 
 )
 
 # create routes
-igw_route = vpc_module.create_route( # route to internet gateway
+vpc_module.create_route( # route to internet gateway
     route_table_id=public_route_table.id,
     destination_cidr_block='0.0.0.0/0',
     gateway_id=internet_gateway.id
 )
 
-nat_gw_route = vpc_module.create_route( # route to nat gateway
+vpc_module.create_route( # route to nat gateway
     route_table_id=private_route_table.id,
     destination_cidr_block='0.0.0.0/0',
     nat_gateway_id=nat_gateway.id
@@ -134,8 +137,7 @@ lb_security_group.create_egress_rule(
     protocol='-1',
     from_port=0,
     to_port=0,
-    cidr_blocks=["0.0.0.0/0"],
-    description='Allow outbound traffic'
+    cidr_blocks=["0.0.0.0/0"]
 )
 
 frontend_security_group.create_ingress_rule(

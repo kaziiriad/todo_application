@@ -1,8 +1,6 @@
 import pulumi_aws as aws
 
 # Define AWS resources
-import random
-import uuid
 
 class VPC:
     def __init__(self, name, cider_block):
@@ -28,17 +26,16 @@ class VPC:
     
     def create_subnet(self, cidr_block, availability_zone, name):
         subnet = aws.ec2.Subnet(
-            name,  # Use the provided name directly
+            f"{name}",
             vpc_id=self.vpc.id,
             cidr_block=cidr_block,
             availability_zone=availability_zone,
             tags={
-                "Name": f"{self.name}-{name}",
+                "Name": f"{self.name} - {availability_zone}",
             },
         )
         self.subnets.append(subnet)
         return subnet
-
     
     def create_route_table(self, name):
         route_table = aws.ec2.RouteTable(
@@ -63,39 +60,30 @@ class VPC:
         return internet_gateway
 
     def create_nat_gateway(self, name, subnet_id):
-        eip = self.create_eip_allocation(f"{name}-eip", "vpc")
         nat_gateway = aws.ec2.NatGateway(
-            name,
-            allocation_id=eip.id,  # Use eip.id instead of creating new allocation
+            f"{name}",
+            allocation_id=self.create_eip_allocation(f"{name}-eip", "vpc"),
             subnet_id=subnet_id,
             tags={
-                "Name": name,
+                "Name": f"{name}",
             },
         )
         self.nat_gateways.append(nat_gateway)
         return nat_gateway
     
     def create_route_table_association(self, route_table_id, subnet_id):
-        return aws.ec2.RouteTableAssociation(
-            f"rt-association-{self.name}-{uuid.uuid4()}",  # Use static name instead of Output value
+        aws.ec2.RouteTableAssociation(
+            f"{route_table_id}-association",
             route_table_id=route_table_id,
             subnet_id=subnet_id,
         )
-
-
-    def create_route(self, route_table_id, destination_cidr_block, gateway_id=None, nat_gateway_id=None):
-        name = f"route-{self.name}-{uuid.uuid4()}"
-        route_args = {
-            "route_table_id": route_table_id,
-            "destination_cidr_block": destination_cidr_block,
-        }
-        if gateway_id:
-            route_args["gateway_id"] = gateway_id
-        if nat_gateway_id:
-            route_args["nat_gateway_id"] = nat_gateway_id
-            
-        return aws.ec2.Route(name, **route_args)
-    
+    def create_route(self, route_table_id, destination_cidr_block, gateway_id):
+        aws.ec2.Route(
+            f"{route_table_id}-route",
+            route_table_id=route_table_id,
+            destination_cidr_block=destination_cidr_block,
+            gateway_id=gateway_id,
+        )
     def create_eip_allocation(self, name, domain):
         eip_allocation = aws.ec2.Eip(
             name,

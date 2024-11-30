@@ -7,37 +7,26 @@ class EC2Instance:
         self.ami_id = 'ami-047126e50991d067b' # Replace with your AMI ID
         self.instances = []
     
-    def create(self, name, number, security_groups, key_name, subnet_id, user_data, associate_public_ip_address=False):
-        instance_args = {
-            "instance_type": self.instance_type,  # or your desired instance type
-            "ami": self.ami_id,  # your AMI ID
-            "vpc_security_group_ids": security_groups,  # Changed from security_group_ids
-            "key_name": key_name,
-            "subnet_id": subnet_id,
-            "user_data": user_data,
-            "associate_public_ip_address": associate_public_ip_address,
-            "tags": {
-                "Name": name
-            }
-        }
-
-        if number == 1:
+    def create(self, name, number, security_group_ids, subnet_id, key_name, user_data=None, **kwargs):
+        instances = []
+        for i in range(1, number+1): # Create multiple instances based on the count parameter
             instance = aws.ec2.Instance(
-                name,
-                **instance_args
+                f'{name}-{i}',
+                ami=self.ami_id, # Replace with your AMI ID
+                instance_type=self.instance_type,
+                security_group_ids=security_group_ids,
+                subnet_id=subnet_id,
+                key_name=key_name,
+                user_data=user_data,  # Replace with your user data script
+                **kwargs,  # Additional parameters for the instance creation
+                tags={
+                    'Name': self.name,
+                },
             )
-            self.instances.append(instance)
-            return instance
-        else:
-            instances = []
-            for i in range(number):
-                instance = aws.ec2.Instance(
-                    f"{name}-{i+1}",
-                    **instance_args
-                )
-                instances.append(instance)
-                self.instances.extend(instances)
-            return instances
+            instances.append(instance)
+        
+        self.instances.extend(instances)
+        return self.instances
     
 
     

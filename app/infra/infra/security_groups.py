@@ -2,58 +2,27 @@ import pulumi_aws as aws
 
 class SecurityGroup:
     def __init__(self, name, vpc_id):
-        self.sg = aws.ec2.SecurityGroup(
-            name,
-            vpc_id=vpc_id,
-            description=f"Security group for {name}",
-            ingress=[],  # Initialize empty ingress rules
-            egress=[],   # Initialize empty egress rules
-            tags={
-                "Name": name
-            }
-        )
+        self.sg = aws.ec2.SecurityGroup(name, vpc_id=vpc_id)
         self.name = name
-        self.id = self.sg.id
 
-    def create_ingress_rule(self, protocol, from_port, to_port, description, cidr_blocks=None, source_security_group_id=None):
-        rule = {
-            "protocol": protocol,
-            "from_port": from_port,
-            "to_port": to_port,
-            "description": description
-        }
-        
-        if cidr_blocks:
-            rule["cidr_blocks"] = cidr_blocks
-        if source_security_group_id:
-            rule["source_security_group_id"] = source_security_group_id
-
-        aws.ec2.SecurityGroupRule(
-            f"{self.name}-ingress-{from_port}",
-            type="ingress",
-            security_group_id=self.sg.id,
-            **rule
-        )
-
-    def create_egress_rule(self, protocol, from_port, to_port, description, cidr_blocks=None, source_security_group_id=None):
-        rule = {
-            "protocol": protocol,
-            "from_port": from_port,
-            "to_port": to_port,
-            "description": description
-        }
-
-        if cidr_blocks:
-            rule["cidr_blocks"] = cidr_blocks
-        if source_security_group_id:
-            rule["source_security_group_id"] = source_security_group_id
-
-        aws.ec2.SecurityGroupRule(
-            f"{self.name}-egress-{from_port}",
-            type="egress",
-            security_group_id=self.sg.id,
-            **rule
-        )
+    def create_ingress_rule(self, from_port, to_port, protocol, cidr_blocks, description, **kwargs):
+        self.sg.ingress.add(aws.ec2.SecurityGroupRuleArgs(
+            from_port=from_port,
+            to_port=to_port,
+            protocol=protocol,
+            cidr_blocks=cidr_blocks,
+            description=description,
+            **kwargs
+        ))
+    def create_egress_rule(self, from_port, to_port, protocol, cidr_blocks, description, **kwargs):
+        self.sg.egress.add(aws.ec2.SecurityGroupRuleArgs(
+            from_port=from_port,
+            to_port=to_port,
+            protocol=protocol,
+            cidr_blocks=cidr_blocks,
+            description=description,
+            **kwargs
+        ))
 
 # Usage
 # vpc_id = aws.ec2.get_vpc(id="vpc-0abcdef1234567890").id

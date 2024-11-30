@@ -4,6 +4,4 @@ services:
     image: kaziiriad/todo-frontend:latest
     ports:
       - "80:80"
-    environment:
-      - VITE_API_URL=http://18.140.67.44
     restart: always
