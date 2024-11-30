@@ -90,6 +90,10 @@ This project is a full-stack Todo application with a React frontend, FastAPI bac
 ```
    uvicorn main:app --reload
 ```
+## Infrastructure Design
+
+![Infrastructure Design](infra/infra-design.png)
+
 
 ### Infrastructure Setup
 
