@@ -1,0 +1,11 @@
+version: '3'
+services:
+  backend:
+    image: your-backend-image
+    ports:
+      - "8000:8000"
+    environment:
+        DB_USER=myuser
+      - DB_PASSWORD=mypassword
+      - DB_NAME=mydb
+    restart: always

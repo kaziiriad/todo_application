@@ -4,6 +4,9 @@ runtime:
   name: python
   options:
     toolchain: uv
+    virtualenv: /mnt/e/poridhi_exam/.venv
+    python: 3.10
+
 config:
   pulumi:tags:
     value:
