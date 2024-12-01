@@ -3,6 +3,10 @@
 import pulumi
 import pulumi_aws as aws 
 
+from alb import create_alb
+from user_data import get_frontend_user_data, get_backend_user_data, get_database_user_data
+from asg import create_asg
+
 config = pulumi.Config()
 
 
@@ -21,11 +25,6 @@ sudo systemctl start docker
 sudo systemctl enable docker
 newgrp docker
 mkdir -p /home/ubuntu/app
-
-# Verify Docker is running
-sudo systemctl status docker
-
-# Create app directory
 """
 
 # lb_docker_compose = """
@@ -46,16 +45,28 @@ sudo systemctl status docker
 vpc_module = VPC('my-vpc', cider_block='10.0.0.0/16')
 
 # create subnets
-public_subnets = vpc_module.create_subnet( # public subnets
+public_subnets_1 = vpc_module.create_subnet( # public subnets
     cidr_block='10.0.1.0/24',
     availability_zone='ap-southeast-1a',
     name='public-subnet-1'
 )
 
-private_subnets = vpc_module.create_subnet( # private subnets
-    cidr_block='10.0.2.0/24',
+public_subnets_2 = vpc_module.create_subnet( # public subnets
+    cidr_block='10.0.3.0/24',
     availability_zone='ap-southeast-1b',
+    name='public-subnet-2'
+)
+
+private_subnets_1 = vpc_module.create_subnet( # private subnets
+    cidr_block='10.0.2.0/24',
+    availability_zone='ap-southeast-1a',
     name='private-subnet-1'
+)
+
+private_subnets_2 = vpc_module.create_subnet( # private subnets
+    cidr_block='10.0.4.0/24',
+    availability_zone='ap-southeast-1b',
+    name='private-subnet-2'
 )
 
 # create route tables
@@ -72,20 +83,35 @@ internet_gateway = vpc_module.create_internet_gateway( # internet gateway
     name='my-internet-gateway'
 )
 
-nat_gateway = vpc_module.create_nat_gateway( # nat gateway
+
+nat_gateway_1 = vpc_module.create_nat_gateway( # nat gateway
     name="my-nat-gateway",
-    subnet_id=public_subnets.id
+    subnet_id=public_subnets_1.id
+)
+nat_gateway_2 = vpc_module.create_nat_gateway( # nat gateway
+    name="my-nat-gateway-2",
+    subnet_id=public_subnets_2.id
 )
 
 # create route table associations
 vpc_module.create_route_table_association( # associate public route table with public subnets
     route_table_id=public_route_table.id,
-    subnet_id=public_subnets.id
+    subnet_id=public_subnets_1.id
+)
+
+vpc_module.create_route_table_association( # associate public route table with public subnets
+    route_table_id=public_route_table.id,
+    subnet_id=public_subnets_2.id
 )
 
 vpc_module.create_route_table_association( # associate private route table with private subnets
     route_table_id=private_route_table.id,
-    subnet_id=private_subnets.id
+    subnet_id=private_subnets_1.id
+)
+
+vpc_module.create_route_table_association( # associate private route table with private subnets
+    route_table_id=private_route_table.id,
+    subnet_id=private_subnets_2.id
 )
 
 # create routes
@@ -95,10 +121,16 @@ igw_route = vpc_module.create_route( # route to internet gateway
     gateway_id=internet_gateway.id
 )
 
-nat_gw_route = vpc_module.create_route( # route to nat gateway
+nat_gw_route_1 = vpc_module.create_route( # route to nat gateway
     route_table_id=private_route_table.id,
     destination_cidr_block='0.0.0.0/0',
-    nat_gateway_id=nat_gateway.id
+    nat_gateway_id=nat_gateway_1.id
+)
+
+nat_gw_route_2 = vpc_module.create_route( # route to nat gateway
+    route_table_id=private_route_table.id,
+    destination_cidr_block='0.0.0.0/0',
+    nat_gateway_id=nat_gateway_2.id
 )
 
 # create security groups
@@ -224,48 +256,80 @@ instance_module = EC2Instance()
 
 
 # create load balancer
-lb_instance = instance_module.create(
-    name="nginx_load_balancer",
-    number=1,
-    security_groups=[lb_security_group.id],
-    key_name=KEY_PAIR_NAME,
-    subnet_id=public_subnets.id,
-    user_data=USER_DATA,
-    associate_public_ip_address=True
-    
-)
 
 
 # create frontend instances
-frontend_instances = instance_module.create(
-    name="frontend_instance",
-    number=2,
-    security_groups=[frontend_security_group.id],
-    key_name=KEY_PAIR_NAME,
-    subnet_id=public_subnets.id,
-    user_data=USER_DATA
-)
-
-backend_instances = instance_module.create(
-    name='backend_instance',
-    number=2,
-    security_groups=[backend_security_group.id],
-    key_name=KEY_PAIR_NAME,
-    subnet_id=private_subnets.id,
-    user_data=USER_DATA
-)
 
 database_instance = instance_module.create(
     name='database_instance',
     number=1,
     security_groups=[db_security_group.id],
     key_name=KEY_PAIR_NAME,
-    subnet_id=private_subnets.id,
-    user_data=USER_DATA
+    subnet_id=private_subnets_1.id,
+    user_data=get_database_user_data(
+        "myuser",
+        "mypassword",
+        "mydb"
+    )
 )
 
-pulumi.export("vpc_id", vpc_module.vpc.id)
-pulumi.export("load_balancer_ip", lb_instance.public_ip)
-pulumi.export("frontend_instance_ips", [instance.private_ip for instance in frontend_instances])
-pulumi.export("backend_instance_ips", [instance.private_ip for instance in backend_instances])
+
+alb_instance = create_alb(
+    vpc_id=vpc_module.vpc.id,
+    name='app-alb_instance',
+    security_group_ids=[lb_security_group.id],
+    subnets=[public_subnets_1.id, public_subnets_2.id],
+)
+alb = alb_instance['alb']
+pulumi.export("alb_dns_name", alb.dns_name)
+
+frontend_tg = alb_instance['frotned_tg']
+backend_tg = alb_instance['backend_tg']
+frontend_listener = alb_instance['frontend_listener']
+backend_listener = alb_instance['backend_listener']
+
+frontend_lt = aws.ec2.LaunchTemplate("frontend-lt",
+    name_prefix="frontend-",
+    image_id="ami-047126e50991d067b",  # Use your AMI ID
+    instance_type="t2.micro",
+    vpc_security_group_ids=[frontend_security_group.id],
+    user_data=get_frontend_user_data(alb.dns_name),
+    key_name=KEY_PAIR_NAME
+)
 pulumi.export("database_instance_ip", database_instance.private_ip)
+
+
+backend_lt = aws.ec2.LaunchTemplate("backend-lt",
+    name_prefix="backend-",
+    image_id="ami-047126e50991d067b",  # Use your AMI ID
+    instance_type="t2.micro",
+    vpc_security_group_ids=[backend_security_group.id],
+    user_data=get_backend_user_data(
+        database_instance.private_ip,
+        "myuser",
+        "mypassword",
+        "mydb"
+    ),
+    key_name=KEY_PAIR_NAME
+)
+
+
+frontend_asg = create_asg(
+    name="frontend-asg",
+    launch_template_id=frontend_lt.id,
+    vpc_zone_identifier=[public_subnets_1.id, public_subnets_2.id],
+    target_group_arns=[frontend_tg.arn]
+
+)
+
+backend_asg = create_asg(
+    name="backend-asg",
+    launch_template_id=backend_lt.id,
+    vpc_zone_identifier=[private_subnets_1.id, private_subnets_2.id],
+    target_group_arns=[backend_tg.arn]
+)
+
+pulumi.export("frontend_asg_name", frontend_asg['asg'].id)
+pulumi.export("backend_asg_name", backend_asg['asg'].id)
+pulumi.export("frontend_listener_arn", frontend_listener.arn)
+pulumi.export("backend_listener_arn", backend_listener.arn)
