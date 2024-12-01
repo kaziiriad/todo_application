@@ -3,6 +3,11 @@
 ## Overview
 
 This project is a full-stack Todo application with a React frontend, FastAPI backend, and infrastructure managed with Pulumi. The application is containerized using Docker and can be deployed on AWS EC2 instances.
+
+## System HLD
+
+![HLD](system-hld.png)
+
 ## Project Structure
 
 1. Navigate to the `backend` directory
@@ -90,9 +95,21 @@ This project is a full-stack Todo application with a React frontend, FastAPI bac
 ```
    uvicorn main:app --reload
 ```
+5. Run PostgreSQL database from docker using the following command.
+```
+   docker run --name postgres-db -e POSTGRES_USER=myuser -e POSTGRES_PASSWORD=mypassword -e POSTGRES_DB=mydb -p 5432:5432 -d postgres:13
+```
+## Run Using Docker
+You could run the project using `Docker` as well as `Docker Compose`.
+
+1. Run the `docker-compose.yml`
+```
+   docker-compose up --build
+```
+
 ## Infrastructure Design
 
-![Infrastructure Design](/app/infra/infra-design.png)
+![Infrastructure Design](app/infra/infra-design.png)
 
 
 ### Infrastructure Setup
@@ -108,6 +125,9 @@ This project is a full-stack Todo application with a React frontend, FastAPI bac
 ```
 4. Configure AWS region and other necessary variables
 5. Deploy the infrastructure:
+```
+   pulumi up
+```
 
 
 ## Deployment
@@ -126,10 +146,6 @@ Detailed deployment instructions can be found in the infrastructure documentatio
 - For frontend development, refer to the README in the `todo-frontend` directory
 - Backend API documentation is available at `/docs` when running the FastAPI server
 - Infrastructure changes should be made through Pulumi scripts in the `infra` directory
-
-## Contributing
-
-Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
