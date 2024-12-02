@@ -64,16 +64,16 @@ clean:
 	@echo "Cleaning up images..."
 	docker rmi $(FRONTEND_IMAGE):$(VERSION) || true
 	docker rmi $(BACKEND_IMAGE):$(VERSION) || true
-	docker rmi $(DATABASE_IMAGE):$(VERSION) || true
+	# docker rmi $(DATABASE_IMAGE):$(VERSION) || true
 
 # Development commands
 .PHONY: dev
 dev:
-	docker compose up --build
+	docker-compose up --build
 
 .PHONY: down
 down:
-	docker compose down
+	docker-compose down
 
 # Help target
 .PHONY: help

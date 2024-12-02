@@ -5,17 +5,14 @@ services:
     build: 
       context: ./app/todo-frontend
       dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=http://localhost:8000
+      # Remove the VITE_API_URL build arg as we're using relative URLs now
     ports:
       - "80:80"
-    environment:
-      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
     networks:
       - app-network
-
+      
   backend:
     build: 
       context: ./app/backend
@@ -23,8 +20,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - API_URL=http://localhost:8000
-      - DB_HOST=postgres
+      # Backend should reference itself for internal URLs
+      - API_URL=http://backend:8000
+      - DB_HOST=postgres  # This is correct - using service name
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
       - DB_NAME=mydb
@@ -32,7 +30,7 @@ services:
     depends_on:
       - postgres
     networks:
-      - app-network
+      - app-network  # Add network for container communication
 
   postgres:
     image: postgres:15-alpine
@@ -45,8 +43,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - app-network
+      - app-network  # Add network for container communication
 
+# Define the network that allows containers to communicate
 networks:
   app-network:
     driver: bridge
