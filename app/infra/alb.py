@@ -12,14 +12,13 @@ def create_alb(
     # Create an Application Load Balancer
     alb = aws.lb.LoadBalancer(
         name,
-        vpc_id=vpc_id,
         load_balancer_type="application",
         security_groups=security_group_ids,
         subnets=subnets,
     )
 
     frontend_tg = aws.lb.TargetGroup(
-        name=f"{name}-frontend-tg",
+        "frontend-tg",
         port=80,
         protocol="HTTP",
         target_type="instance",
@@ -37,7 +36,7 @@ def create_alb(
     )
 
     backend_tg = aws.lb.TargetGroup(
-        name=f"{name}-backend-tg",
+        "backend-tg",
         port=8000,
         protocol="HTTP",
         target_type="instance",
@@ -56,25 +55,30 @@ def create_alb(
 
 
     frontend_listnener = aws.lb.Listener(
-        name=f"{name}-frontend-listener",
+        resource_name="frontend-listener",
         load_balancer_arn=alb.arn,
         port=80,
         protocol="HTTP",
-        default_action={
-            "type": "forward",
-            "target_group_arn": frontend_tg.arn
-        }
+        default_actions=[     # List of actions
+            {                 # Each action is a dictionary
+                "type": "forward",
+                "target_group_arn": frontend_tg.arn,
+            },
+        ]
     )
 
     backend_listener = aws.lb.Listener(
-        name=f"{name}-backend-listener",
+        resource_name="backend-listener",
         load_balancer_arn=alb.arn,
         port=8000,
         protocol="HTTP",
-        default_action={
-            "type": "forward",
-            "target_group_arn": backend_tg.arn
-        }
+        default_actions=[     # List of actions
+            {                 # Each action is a dictionary
+                "type": "forward",
+                "target_group_arn": backend_tg.arn,
+            },
+        ]
+
     )
 
 

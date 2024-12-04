@@ -1,9 +1,6 @@
 import pulumi_aws as aws
 
 # Define AWS resources
-import random
-import uuid
-
 class VPC:
     def __init__(self, name, cider_block):
         self.name = name
@@ -26,12 +23,13 @@ class VPC:
         )
         return self.vpc
     
-    def create_subnet(self, cidr_block, availability_zone, name):
+    def create_subnet(self, cidr_block, availability_zone, name, map_public_ip_on_launch=False):
         subnet = aws.ec2.Subnet(
             name,  # Use the provided name directly
             vpc_id=self.vpc.id,
             cidr_block=cidr_block,
             availability_zone=availability_zone,
+            map_public_ip_on_launch=map_public_ip_on_launch,  # Enable or disable mapping public IP on launch
             tags={
                 "Name": f"{self.name}-{name}",
             },
@@ -75,16 +73,17 @@ class VPC:
         self.nat_gateways.append(nat_gateway)
         return nat_gateway
     
-    def create_route_table_association(self, route_table_id, subnet_id):
+    def create_route_table_association(self, name, route_table_id, subnet_id):
+          # Use static name instead of Output value
+
         return aws.ec2.RouteTableAssociation(
-            f"rt-association-{self.name}-{uuid.uuid4()}",  # Use static name instead of Output value
+            f"rt-association-{name}",
             route_table_id=route_table_id,
             subnet_id=subnet_id,
         )
 
 
-    def create_route(self, route_table_id, destination_cidr_block, gateway_id=None, nat_gateway_id=None):
-        name = f"route-{self.name}-{uuid.uuid4()}"
+    def create_route(self, name, route_table_id, destination_cidr_block, gateway_id=None, nat_gateway_id=None):
         route_args = {
             "route_table_id": route_table_id,
             "destination_cidr_block": destination_cidr_block,
@@ -94,7 +93,7 @@ class VPC:
         if nat_gateway_id:
             route_args["nat_gateway_id"] = nat_gateway_id
             
-        return aws.ec2.Route(name, **route_args)
+        return aws.ec2.Route(f"route-{name}", **route_args)
     
     def create_eip_allocation(self, name, domain):
         eip_allocation = aws.ec2.Eip(

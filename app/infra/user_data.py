@@ -1,6 +1,6 @@
 import base64
 
-def get_frontend_user_data(api_url):
+def get_frontend_user_data(alb_dns):
     script = f"""#!/bin/bash
 # Install Docker
 apt-get update
@@ -18,11 +18,11 @@ cat > /app/docker-compose.yml << 'EOL'
 version: '3'
 services:
   frontend:
-    image: kaziiriad/todo-frontend:prod
+    image: kaziiriad/todo-frontend:deploy
     ports:
       - "80:80"
     environment:
-      - VITE_API_URL={api_url}
+      - BACKEND_URL=http://{alb_dns}
     restart: always
 EOL
 
@@ -50,7 +50,7 @@ cat > /app/docker-compose.yml << 'EOL'
 version: '3'
 services:
   backend:
-    image: kaziiriad/todo-backend:prod
+    image: kaziiriad/todo-backend:deploy
     ports:
       - "8000:8000"
     environment:
