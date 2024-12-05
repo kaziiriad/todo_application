@@ -1,27 +1,44 @@
 version: '3.8'
 
 services:
-  frontend:
-    build: 
-      context: ./app/todo-frontend
-      dockerfile: Dockerfile
+
+  nginx:
+    image: nginx:alpine
     ports:
       - "80:80"
-    environment:
-      - BACKEND_URL=http://backend:8000  # Add this to configure nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - backend
+      - frontend_1
+      - frontend_2
+      - backend_1
+      - backend_2
     networks:
       - app-network
-      
-  backend:
-    build: 
-      context: ./app/backend
-      dockerfile: Dockerfile
+
+  frontend_1:
+    image: kaziiriad/todo-frontend:delpoy
     ports:
-      - "8000:8000"
+      - "81:80"
     environment:
-      - API_URL=http://backend:8000
+      - BACKEND_URL=http://nginx  # Add this to configure nginx
+    networks:
+      - app-network
+    
+  frontend_2:
+    image: kaziiriad/todo-frontend:delpoy
+    ports:
+      - "82:80"
+    environment:
+      - BACKEND_URL=http://nginx  # Add this to configure nginx
+    networks:
+      - app-network
+
+  backend_1:
+    image: kaziiriad/todo-backend:delpoy
+    ports:
+      - "8001:8000"
+    environment:
       - DB_HOST=postgres
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
@@ -31,6 +48,22 @@ services:
       - postgres
     networks:
       - app-network
+
+  backend_2:
+    image: kaziiriad/todo-backend:delpoy
+    ports:
+      - "8002:8000"
+    environment:
+      - DB_HOST=postgres
+      - DB_USER=myuser
+      - DB_PASSWORD=mypassword
+      - DB_NAME=mydb
+      - DB_PORT=5432
+    depends_on:
+      - postgres
+    networks:
+      - app-network
+
 
   postgres:
     image: postgres:15-alpine
