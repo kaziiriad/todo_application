@@ -1,91 +1,36 @@
 import pulumi
 import pulumi_aws as aws
+import json
 
+nginx_role = aws.iam.Role("nginx-role",
+    assume_role_policy=json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Action": "sts:AssumeRole",
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "ec2.amazonaws.com"
+            }
+        }]
+    })
+)
 
-def create_alb(
-        vpc_id,
-        name,
-        security_group_ids,
-        subnets,
-):
-    
-    # Create an Application Load Balancer
-    alb = aws.lb.LoadBalancer(
-        name,
-        load_balancer_type="application",
-        security_groups=security_group_ids,
-        subnets=subnets,
-    )
+nginx_policy = aws.iam.RolePolicy("nginx-policy",
+    role=nginx_role.id,
+    policy=json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Action": [
+                "autoscaling:DescribeAutoScalingGroups",
+                "ec2:DescribeInstances"
+            ],
+            "Resource": "*"
+        }]
+    })
+)
 
-    frontend_tg = aws.lb.TargetGroup(
-        "frontend-tg",
-        port=80,
-        protocol="HTTP",
-        target_type="instance",
-        vpc_id=vpc_id,
-        health_check={
-            "enabled": True,
-            "healthy_threshold": 2,
-            "interval": 30,
-            "path": "/",
-            "port": "80",
-            "protocol": "HTTP",
-            "timeout": 5,
-            "unhealthy_threshold": 2
-        }
-    )
+nginx_instance_profile = aws.iam.InstanceProfile("nginx-profile",
+    role=nginx_role.name
+)
 
-    backend_tg = aws.lb.TargetGroup(
-        "backend-tg",
-        port=8000,
-        protocol="HTTP",
-        target_type="instance",
-        vpc_id=vpc_id,
-        health_check={
-            "enabled": True,
-            "healthy_threshold": 2,
-            "interval": 30,
-            "path": "/tasks",
-            "port": "8000",
-            "protocol": "HTTP",
-            "timeout": 5,
-            "unhealthy_threshold": 2
-        }
-    )
-
-
-    frontend_listnener = aws.lb.Listener(
-        resource_name="frontend-listener",
-        load_balancer_arn=alb.arn,
-        port=80,
-        protocol="HTTP",
-        default_actions=[     # List of actions
-            {                 # Each action is a dictionary
-                "type": "forward",
-                "target_group_arn": frontend_tg.arn,
-            },
-        ]
-    )
-
-    backend_listener = aws.lb.Listener(
-        resource_name="backend-listener",
-        load_balancer_arn=alb.arn,
-        port=8000,
-        protocol="HTTP",
-        default_actions=[     # List of actions
-            {                 # Each action is a dictionary
-                "type": "forward",
-                "target_group_arn": backend_tg.arn,
-            },
-        ]
-
-    )
-
-
-    return {
-        "alb": alb,
-        "frontend_tg": frontend_tg,
-        "backend_tg": backend_tg,
-        "frontend_listener": frontend_listnener,
-        "backend_listener": backend_listener,
-    }

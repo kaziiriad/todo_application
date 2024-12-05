@@ -3,19 +3,24 @@
 import pulumi
 import pulumi_aws as aws 
 
-from alb import create_alb
-from user_data import get_frontend_user_data, get_backend_user_data, get_database_user_data
+from user_data import get_frontend_user_data, get_backend_user_data, get_database_user_data, get_nginx_alb_user_data
 from asg import create_asg
+import json
 
 config = pulumi.Config()
-
+db_user = config.get('database:user') or 'myuser'
+db_password = config.get_secret('database:password')
+db_name = config.get('database:name') or 'mydb'
+region = config.get('aws:region')
 
 from ec2 import EC2Instance
 from security_groups import SecurityGroup
 from vpc import VPC
 
-KEY_PAIR_NAME = 'MyNewKeyPair'
+KEY_PAIR_NAME = 'MyNewKeyPair3'
 
+# Add at the beginning of __main__.py
+# Create IAM role for Nginx ALB
 
 # lb_docker_compose = """
 # version: '3'
@@ -244,37 +249,36 @@ database_instance = instance_module.create(
     key_name=KEY_PAIR_NAME,
     subnet_id=private_subnets_1.id,
     user_data=get_database_user_data(
-        "myuser",
-        "mypassword",
-        "mydb"
+        db_user,
+        db_password,
+        db_name
     )
 )
 
-
-alb_instance = create_alb(
-    vpc_id=vpc_module.vpc.id,
-    name='app-alb-instance',
-    security_group_ids=[lb_security_group.id],
-    subnets=[public_subnets_1.id, public_subnets_2.id],
+nginx_alb = instance_module.create(
+    name='nginx-alb',
+    number=1,
+    security_groups=[lb_security_group.id],
+    key_name=KEY_PAIR_NAME,
+    subnet_id=public_subnets_1.id,
+    user_data=get_nginx_alb_user_data(
+        region    
+    ),
+    associate_public_ip_address=True
 )
-alb = alb_instance['alb']
-pulumi.export("alb_dns_name", alb.dns_name)
 
-frontend_tg = alb_instance['frontend_tg']
-backend_tg = alb_instance['backend_tg']
-frontend_listener = alb_instance['frontend_listener']
-backend_listener = alb_instance['backend_listener']
+
 
 frontend_lt = aws.ec2.LaunchTemplate("frontend-lt",
     name_prefix="frontend-",
-    image_id="ami-047126e50991d067b",  # Use your AMI ID
+    image_id="ami-047126e50991d067b",
     instance_type="t2.micro",
     vpc_security_group_ids=[app_security_group.id],
-    user_data=get_frontend_user_data(alb.dns_name),
+    user_data=get_frontend_user_data(
+        nginx_alb_dns=nginx_alb.private_ip,  # Use Nginx ALB DNS
+    ),
     key_name=KEY_PAIR_NAME
 )
-pulumi.export("database_instance_ip", database_instance.private_ip)
-
 
 backend_lt = aws.ec2.LaunchTemplate("backend-lt",
     name_prefix="backend-",
@@ -283,30 +287,41 @@ backend_lt = aws.ec2.LaunchTemplate("backend-lt",
     vpc_security_group_ids=[app_security_group.id],
     user_data=get_backend_user_data(
         database_instance.private_ip,
-        "myuser",
-        "mypassword",
-        "mydb"
+        db_user,
+        db_password,
+        db_name
     ),
     key_name=KEY_PAIR_NAME
 )
 
 
 frontend_asg = create_asg(
-    name="frontend-asg",
+    name="frontend",
     launch_template_id=frontend_lt.id,
     vpc_zone_identifiers=[public_subnets_1.id, public_subnets_2.id],
-    target_group_arns=[frontend_tg.arn]
+    health_check_type="EC2",  # Changed from ELB to EC2
+    health_check_grace_period=300,
+    target_group_arns=None,  # If you're not using ALB target groups
+    min_size=1,  # At least 1 instances for high availability
+    max_size=3,  # Allow scaling up to 3 instances
+    desired_capacity=2,
 
 )
 
 backend_asg = create_asg(
-    name="backend-asg",
+    name="backend",
     launch_template_id=backend_lt.id,
     vpc_zone_identifiers=[private_subnets_1.id, private_subnets_2.id],
-    target_group_arns=[backend_tg.arn]
+    health_check_type="EC2",  # Changed from ELB to EC2
+    health_check_grace_period=300,
+    target_group_arns=None,
+    min_size=1,  # At least 1 instances for high availability
+    max_size=3,  # Allow scaling up to 3 instances
+    desired_capacity=2,
 )
 
-pulumi.export("frontend_asg_name", frontend_asg['asg'].id)
-pulumi.export("backend_asg_name", backend_asg['asg'].id)
-pulumi.export("frontend_listener_arn", frontend_listener.arn)
-pulumi.export("backend_listener_arn", backend_listener.arn)
+pulumi.export("nginx_alb_1_public_ip", nginx_alb.public_ip)
+pulumi.export("database_private_ip", database_instance.private_ip)
+pulumi.export("frontend_asg_name", frontend_asg["asg"].name)
+pulumi.export("backend_asg_name", backend_asg["asg"].name)
+

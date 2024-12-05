@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from typing import List
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from models import TaskCreate, TaskUpdate, TaskResponse
-from database import Task, get_db  # Assuming TaskBase is renamed to Task for clarity
+from database import Task, get_db, DATABASE_URL  # Assuming TaskBase is renamed to Task for clarity
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
@@ -149,3 +151,32 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
     
     db.delete(task)
     db.commit()
+
+
+
+@app.get("/health", response_model=dict, status_code=status.HTTP_200_OK)
+async def health():
+    """
+    Check the health of the application and database connection.
+    
+    Returns:
+        dict: Health status of the application and database
+    """
+    health_status = {"status": "Healthy", "database": "Connected"}
+
+    # Check if the database connection is active
+    if not DATABASE_URL:
+        health_status["database"] = "Database URL not set"
+        return health_status
+    
+    try:
+        engine = create_engine(DATABASE_URL)
+        with engine.connect() as connection:
+            result = connection.execute(text("SELECT 1"))
+            result.fetchone()  # Actually execute the query
+        health_status["database"] = "Connected"
+    except SQLAlchemyError as e:
+        health_status["status"] = "Unhealthy"
+        health_status["database"] = f"Database connection error: {str(e)}"
+    
+    return health_status
