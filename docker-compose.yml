@@ -16,7 +16,7 @@ services:
     networks:
       - app-network
 
-  frontend_1:
+  frontend:
     image: kaziiriad/todo-frontend:delpoy
     ports:
       - "81:80"
@@ -25,16 +25,7 @@ services:
     networks:
       - app-network
     
-  frontend_2:
-    image: kaziiriad/todo-frontend:delpoy
-    ports:
-      - "82:80"
-    environment:
-      - BACKEND_URL=http://nginx  # Add this to configure nginx
-    networks:
-      - app-network
-
-  backend_1:
+  backend:
     image: kaziiriad/todo-backend:delpoy
     ports:
       - "8001:8000"
@@ -44,27 +35,22 @@ services:
       - DB_PASSWORD=mypassword
       - DB_NAME=mydb
       - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
     depends_on:
       - postgres
+      - redis
     networks:
       - app-network
 
-  backend_2:
-    image: kaziiriad/todo-backend:delpoy
+  redis:
+    image: redis:alpine
     ports:
-      - "8002:8000"
-    environment:
-      - DB_HOST=postgres
-      - DB_USER=myuser
-      - DB_PASSWORD=mypassword
-      - DB_NAME=mydb
-      - DB_PORT=5432
-    depends_on:
-      - postgres
+      - "6379:6379"
     networks:
       - app-network
-
-
+  
   postgres:
     image: postgres:15-alpine
     ports:
