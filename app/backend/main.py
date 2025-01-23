@@ -4,9 +4,14 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from models import TaskCreate, TaskUpdate, TaskResponse
+from manager import RedisManager
 from database import Task, get_db, DATABASE_URL  # Assuming TaskBase is renamed to Task for clarity
 from fastapi.middleware.cors import CORSMiddleware
 import os
+
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = os.getenv("REDIS_PORT", 6379)
+REDIS_DB = os.getenv("REDIS_DB", 0)
 
 app = FastAPI(
     title="TODO API",
@@ -21,6 +26,11 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+redis_manager = RedisManager(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    db=REDIS_DB
+)
 
 @app.get(
     "/tasks/", 
@@ -35,7 +45,12 @@ async def get_all_tasks(db: Session = Depends(get_db)):
     Returns:
         List[TaskResponse]: List of all tasks
     """
+    redis_key = "tasks"
+    cached_tasks = redis_manager.get(redis_key)
+    if cached_tasks:
+        return cached_tasks
     tasks = db.query(Task).all()
+    redis_manager.set(redis_key, tasks, expire=600)  # Cache for 10 minutes
     return tasks
 
 @app.get(
@@ -57,12 +72,17 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
     Returns:
         TaskResponse: The requested task
     """
+    redis_key = f"task_{task_id}"
+    cached_task = redis_manager.get(redis_key)
+    if cached_task:
+        return cached_task
     task = db.query(Task).filter(Task.id == task_id).first()
     if task is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, 
             detail=f"Task with ID {task_id} not found"
         )
+    redis_manager.set(redis_key, task, expire=300)
     return task
 
 @app.post(
@@ -165,6 +185,7 @@ async def health():
     health_status = {"status": "Healthy", "database": "Connected"}
 
     # Check if the database connection is active
+    
     if not DATABASE_URL:
         health_status["database"] = "Database URL not set"
         return health_status
