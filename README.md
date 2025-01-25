@@ -4,9 +4,43 @@
 
 This project is a full-stack Todo application with a React frontend, FastAPI backend, and infrastructure managed with Pulumi. The application is containerized using Docker and can be deployed on AWS EC2 instances.
 
-## System HLD
+![Project Image](image.png)
 
-![HLD](system-hld.png)
+## Architecture Diagram
+
+```mermaid
+graph TD
+    subgraph "AWS Region"
+        subgraph "ap-southeast-1a"
+            EC2_Frontend1["EC2 Frontend-1"]
+            EC2_Backend1["EC2 Backend-1"]
+        end
+        
+        subgraph "ap-southeast-1b"
+            EC2_Frontend2["EC2 Frontend-2"]
+            EC2_Backend2["EC2 Backend-2"]
+        end
+        
+        NGINX_ALB["NGINX ALB"]
+        DB_Instance["DB Instance"]
+        Auto_Scaling["Auto Scaling"]
+    end
+
+    NGINX_ALB -->|Routes Traffic| EC2_Frontend1
+    NGINX_ALB -->|Routes Traffic| EC2_Frontend2
+    
+    EC2_Frontend1 -->|Communicates With| EC2_Backend1
+    EC2_Frontend2 -->|Communicates With| EC2_Backend2
+    
+    EC2_Backend1 -->|Connects To| DB_Instance
+    EC2_Backend2 -->|Connects To| DB_Instance
+    
+    Auto_Scaling --> EC2_Frontend1
+    Auto_Scaling --> EC2_Frontend2
+    Auto_Scaling --> EC2_Backend1
+    Auto_Scaling --> EC2_Backend2
+```
+
 
 ## Project Structure
 
@@ -99,20 +133,21 @@ This project is a full-stack Todo application with a React frontend, FastAPI bac
 ```
    docker run --name postgres-db -e POSTGRES_USER=myuser -e POSTGRES_PASSWORD=mypassword -e POSTGRES_DB=mydb -p 5432:5432 -d postgres:13
 ```
+6. Run Redis database from docker using the following command.
+```
+   docker run --name redis-db -p 6379:6379 -d redis
+```
 ## Run Using Docker
 You could run the project using `Docker` as well as `Docker Compose`.
 
 1. Run the `docker-compose.yml`
 ```
    docker-compose up --build
+   # if you want to scale the services
+   docker-compose up --scale backend=3 --scale frontend=3
 ```
 
-## Infrastructure Design
-
-![Infrastructure Design](app/infra/infra-design.png)
-
-
-### Infrastructure Setup
+## Infrastructure Setup
 
 1. Navigate to the `infra` directory
 2. Install Pulumi dependencies:
