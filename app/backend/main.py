@@ -1,3 +1,4 @@
+from collections import defaultdict
 from fastapi import FastAPI, HTTPException, Depends, status
 from typing import List
 from sqlalchemy import create_engine, text
@@ -182,12 +183,11 @@ async def health():
     Returns:
         dict: Health status of the application and database
     """
-    health_status = {"status": "Healthy", "database": "Connected"}
-
+    health_status = defaultdict(str)
     # Check if the database connection is active
     
     if not DATABASE_URL:
-        health_status["database"] = "Database URL not set"
+        health_status["database"]["msg"] = "Database URL not set"
         return health_status
     
     try:
@@ -195,9 +195,17 @@ async def health():
         with engine.connect() as connection:
             result = connection.execute(text("SELECT 1"))
             result.fetchone()  # Actually execute the query
-        health_status["database"] = "Connected"
+        health_status["database"]["status"] = "Connected"
+        
     except SQLAlchemyError as e:
-        health_status["status"] = "Unhealthy"
-        health_status["database"] = f"Database connection error: {str(e)}"
+        health_status["database"]["status"] = "Unhealthy"
+        health_status["database"]["msg"] = f"Database connection error: {str(e)}"
     
+    try:
+        redis_manager.ping()
+        health_status["redis"]["status"] = "Connected"
+    except Exception as e:
+        health_status["redis"]["status"] = "Unhealthy"
+        health_status["redis"]["msg"] = f"Redis connection error: {str(e)}"
+
     return health_status
