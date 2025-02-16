@@ -27,3 +27,26 @@ class TaskResponse(TaskModel):
 
     class Config:
         from_attributes = True
+
+class RoomJoinRequest(BaseModel):
+    invite_code: str
+    participant_email: str
+
+class RoomInviteRequest(BaseModel):
+    room_id: int
+    participant_email: str
+
+class RoomCreate(BaseModel):
+    name: str
+    creator_email: str
+
+class RoomResponse(BaseModel):
+    id: int
+    name: str
+    invite_code: str
+    creator_email: str
+    participant_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

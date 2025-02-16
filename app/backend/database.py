@@ -1,8 +1,9 @@
-from sqlalchemy import Boolean, create_engine, Column, Integer, String, DateTime
+from sqlalchemy import Boolean, create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, relationship
 from datetime import datetime, timezone
 import os
+import secrets
 from typing import Generator
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -31,6 +32,60 @@ except SQLAlchemyError as e:
 # Create sessionmaker
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+class Room(Base):
+    """
+    Room model for storing room information in the database.
+    """
+    __tablename__ = 'rooms'
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String, index=True, unique=True)
+    description = Column(String, nullable=True)
+    invite_code = Column(String, index=True, unique=True)
+    creator_email = Column(String)
+    participant_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # Using UTC timezone
+    participants = relationship("RoomParticipant", back_populates="room")
+    tasks = relationship("Task", back_populates="room")
+
+    def remove_participant(self, participant_email: str):
+        """
+        Remove a participant from the room.
+        
+        Args:
+            participant_email: The email of the participant to remove
+        """
+        participant = self.participants.filter_by(email=participant_email).first()
+        if participant:
+            self.participants.remove(participant)
+            self.participant_count -= 1
+            self.save()
+    def add_participant(self, participant_email: str):
+        
+        participant = self.participants.filter_by(email=participant_email).first()
+        if not participant:
+            self.participants.append(RoomParticipant(email=participant_email))
+            self.participant_count += 1
+            
+    def create_invite_code(self):
+        self.invite_code = secrets.token_urlsafe(8)
+    def remove_room(self):
+        """
+        Remove the room from the database.
+        """
+        pass
+
+class RoomParticipant(Base):
+    __tablename__ = 'room_participants'
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    room_id = Column(Integer, ForeignKey('rooms.id'))
+    email = Column(String, index=True)
+    room = relationship("Room", back_populates="participants")
+
+    def email_validation(self):
+        # Add email validation logic here
+        pass
+    
+    
 class Task(Base):
     """
     Task model for storing task information in the database.
@@ -42,8 +97,10 @@ class Task(Base):
     description = Column(String)
     completed = Column(Boolean, default=False)
     due_date = Column(DateTime, nullable=True)
+    room_id = Column(Integer, ForeignKey('rooms.id'), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # Using UTC timezone
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    room = relationship("Room", back_populates="tasks")
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
