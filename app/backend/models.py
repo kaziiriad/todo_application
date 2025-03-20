@@ -1,5 +1,5 @@
-from typing import Optional
-from pydantic import BaseModel
+from typing import Optional, Union
+from pydantic import BaseModel, validator
 from datetime import datetime
 
 class TaskModel(BaseModel):
@@ -22,8 +22,14 @@ class TaskUpdate(BaseModel):
 
 class TaskResponse(TaskModel):
     id: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: Union[str, datetime]
+    updated_at: Union[str, datetime]
+
+    @validator('created_at', 'updated_at', pre=True)
+    def parse_datetime(cls, value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
     class Config:
         from_attributes = True

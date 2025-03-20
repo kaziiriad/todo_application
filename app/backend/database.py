@@ -72,7 +72,7 @@ class Room(Base):
         """
         Remove the room from the database.
         """
-        pass
+        
 
 class RoomParticipant(Base):
     __tablename__ = 'room_participants'

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Room API Test Client</title>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; }
+        h1, h2 { color: #333; }
+        .section { margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; }
+        input, textarea { width: 100%; padding: 8px; margin-bottom: 10px; }
+        button { padding: 10px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+        #eventLog { height: 200px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Task Room API Test Client</h1>
+
+    <div class="section">
+        <h2>Connection Status</h2>
+        <div id="connectionStatus">Disconnected</div>
+        <button onclick="connectSocket()">Connect Socket</button>
+        <button onclick="disconnectSocket()">Disconnect Socket</button>
+    </div>
+
+    <div class="section">
+        <h2>Create Room</h2>
+        <input type="text" id="roomName" placeholder="Room Name">
+        <input type="email" id="creatorEmail" placeholder="Creator Email">
+        <button onclick="createRoom()">Create Room</button>
+    </div>
+
+    <div class="section">
+        <h2>Join Room</h2>
+        <input type="text" id="inviteCode" placeholder="Invite Code">
+        <input type="email" id="participantEmail" placeholder="Participant Email">
+        <button onclick="joinRoom()">Join Room</button>
+    </div>
+
+    <div class="section">
+        <h2>Create Task</h2>
+        <input type="text" id="taskTitle" placeholder="Task Title">
+        <textarea id="taskDescription" placeholder="Task Description"></textarea>
+        <input type="datetime-local" id="taskDueDate">
+        <input type="number" id="taskRoomId" placeholder="Room ID (optional)">
+        <button onclick="createTask()">Create Task</button>
+    </div>
+
+    <div class="section">
+        <h2>Get Tasks</h2>
+        <input type="number" id="getTasksRoomId" placeholder="Room ID (optional)">
+        <button onclick="getTasks()">Get Tasks</button>
+    </div>
+
+    <div class="section">
+        <h2>Update Task</h2>
+        <input type="number" id="updateTaskId" placeholder="Task ID">
+        <input type="text" id="updateTaskTitle" placeholder="New Title (optional)">
+        <textarea id="updateTaskDescription" placeholder="New Description (optional)"></textarea>
+        <input type="checkbox" id="updateTaskCompleted"> Completed
+        <input type="datetime-local" id="updateTaskDueDate">
+        <button onclick="updateTask()">Update Task</button>
+    </div>
+
+    <div class="section">
+        <h2>Delete Task</h2>
+        <input type="number" id="deleteTaskId" placeholder="Task ID">
+        <button onclick="deleteTask()">Delete Task</button>
+    </div>
+
+    <div class="section">
+        <h2>Event Log</h2>
+        <div id="eventLog"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let socket;
+
+        function logEvent(message, isError = false) {
+            const eventLog = document.getElementById('eventLog');
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `${new Date().toISOString()} - ${message}`;
+            logEntry.className = isError ? 'error' : 'success';
+            eventLog.appendChild(logEntry);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        function connectSocket() {
+            socket = io(API_URL);
+
+            socket.on('connect', () => {
+                document.getElementById('connectionStatus').textContent = 'Connected';
+                logEvent('Socket connected');
+            });
+
+            socket.on('disconnect', () => {
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                logEvent('Socket disconnected');
+            });
+
+            socket.on('task_created', (data) => {
+                logEvent(`Task created: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('task_updated', (data) => {
+                logEvent(`Task updated: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('task_deleted', (data) => {
+                logEvent(`Task deleted: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('room_created', (data) => {
+                logEvent(`Room created: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('participant_joined', (data) => {
+                logEvent(`Participant joined: ${JSON.stringify(data)}`);
+            });
+        }
+
+        function disconnectSocket() {
+            if (socket) {
+                socket.disconnect();
+            }
+        }
+
+        async function createRoom() {
+            try {
+                const response = await fetch(`${API_URL}/rooms/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: document.getElementById('roomName').value,
+                        creator_email: document.getElementById('creatorEmail').value
+                    })
+                });
+                const data = await response.json();
+                logEvent(`Room created: ${JSON.stringify(data)}`);
+            } catch (error) {
+                logEvent(`Error creating room: ${error}`, true);
+            }
+        }
+
+        async function joinRoom() {
+            try {
+                const response = await fetch(`${API_URL}/rooms/join/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        invite_code: document.getElementById('inviteCode').value,
+                        participant_email: document.getElementById('participantEmail').value
+                    })
+                });
+                const data = await response.json();
+                logEvent(`Joined room: ${JSON.stringify(data)}`);
+            } catch (error) {
+                logEvent(`Error joining room: ${error}`, true);
+            }
+        }
+
+        async function createTask() {
+            try {
+                const response = await fetch(`${API_URL}/tasks/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: document.getElementById('taskTitle').value,
+                        description: document.getElementById('taskDescription').value,
+                        due_date: document.getElementById('taskDueDate').value || null,
+                        room_id: document.getElementById('taskRoomId').value || null
+                    })
+                });
+                const data = await response.json();
+                logEvent(`Task created: ${JSON.stringify(data)}`);
+            } catch (error) {
+                logEvent(`Error creating task: ${error}`, true);
+            }
+        }
+
+        async function getTasks() {
+            try {
+                const roomId = document.getElementById('getTasksRoomId').value;
+                const url = roomId ? `${API_URL}/tasks/?room_id=${roomId}` : `${API_URL}/tasks/`;
+                const response = await fetch(url);
+                const data = await response.json();
+                logEvent(`Tasks retrieved: ${JSON.stringify(data)}`);
+            } catch (error) {
+                logEvent(`Error getting tasks: ${error}`, true);
+            }
+        }
+
+        async function updateTask() {
+            try {
+                const taskId = document.getElementById('updateTaskId').value;
+                const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: document.getElementById('updateTaskTitle').value || undefined,
+                        description: document.getElementById('updateTaskDescription').value || undefined,
+                        completed: document.getElementById('updateTaskCompleted').checked,
+                        due_date: document.getElementById('updateTaskDueDate').value || undefined
+                    })
+                });
+                const data = await response.json();
+                logEvent(`Task updated: ${JSON.stringify(data)}`);
+            } catch (error) {
+                logEvent(`Error updating task: ${error}`, true);
+            }
+        }
+
+        async function deleteTask() {
+            try {
+                const taskId = document.getElementById('deleteTaskId').value;
+                const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    logEvent(`Task deleted: ${taskId}`);
+                } else {
+                    logEvent(`Error deleting task: ${response.statusText}`, true);
+                }
+            } catch (error) {
+                logEvent(`Error deleting task: ${error}`, true);
+            }
+        }
+    </script>
+</body>
+</html>

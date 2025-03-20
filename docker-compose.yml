@@ -14,7 +14,9 @@ services:
       - app-network
 
   frontend:
-    image: kaziiriad/todo-frontend:delpoy
+    build:
+      context: ./app/todo-frontend
+      dockerfile: Dockerfile
     
     environment:
       - BACKEND_URL=http://nginx  # Add this to configure nginx
@@ -22,7 +24,9 @@ services:
       - app-network
     
   backend:
-    image: kaziiriad/todo-backend:delpoy
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
     
     environment:
       - DB_HOST=postgres

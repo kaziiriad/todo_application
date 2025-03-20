@@ -1,5 +1,6 @@
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, Depends, status
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, Depends, Query, status
 from fastapi_socketio import SocketManager
 from typing import List
 from pydantic import EmailStr
@@ -28,7 +29,8 @@ app = FastAPI(
     title="TODO API", description="REST API for managing tasks", version="1.0.0"
 )
 
-sio = SocketManager(app=app)
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+socket_app = socketio.ASGIApp(sio, app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,18 +49,27 @@ redis_manager = RedisManager(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
     status_code=status.HTTP_200_OK,
     summary="Get all tasks",
 )
-async def get_all_tasks(db: Session = Depends(get_db)):
+async def get_all_tasks(room_id: int = Query(None, description="Optional room ID to filter tasks"),
+db: Session = Depends(get_db)):
     """
     Retrieve all tasks from the database.
 
     Returns:
         List[TaskResponse]: List of all tasks
     """
-    redis_key = "tasks"
-    cached_tasks = redis_manager.get(redis_key)
-    if cached_tasks:
-        return cached_tasks
-    tasks = db.query(Task).all()
+    tasks = []
+    if room_id:
+        redis_key = f"tasks_{room_id}"
+        cached_tasks = redis_manager.get(redis_key)
+        if cached_tasks:
+            return cached_tasks
+        tasks = db.query(Task).filter(Task.room_id == room_id).all()
+    else:
+        redis_key = "tasks"
+        cached_tasks = redis_manager.get(redis_key)
+        if cached_tasks:
+            return cached_tasks
+        tasks = db.query(Task).all()
     redis_manager.set(redis_key, tasks, expire=600)  # Cache for 10 minutes
     return tasks
 
@@ -69,7 +80,7 @@ async def get_all_tasks(db: Session = Depends(get_db)):
     status_code=status.HTTP_200_OK,
     summary="Get a specific task",
 )
-async def get_task(task_id: int, db: Session = Depends(get_db)):
+async def get_task(task_id: int, room_id: int = Query(None, description="Optional room ID to filter tasks"), db: Session = Depends(get_db)):
     """
     Retrieve a specific task by its ID.
 
@@ -82,16 +93,24 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
     Returns:
         TaskResponse: The requested task
     """
-    redis_key = f"task_{task_id}"
-    cached_task = redis_manager.get(redis_key)
-    if cached_task:
-        return cached_task
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with ID {task_id} not found",
-        )
+    task = None
+    if room_id:
+        redis_key = f"task_{task_id}_{room_id}"
+        cached_task = redis_manager.get(redis_key)
+        if cached_task:
+            return cached_task
+        task = db.query(Task).filter(Task.id == task_id, Task.room_id == room_id).first()
+    else:
+        redis_key = f"task_{task_id}"
+        cached_task = redis_manager.get(redis_key)
+        if cached_task:
+            return cached_task
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if task is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task with ID {task_id} not found",
+            )
     redis_manager.set(redis_key, task, expire=300)
     return task
 
@@ -102,7 +121,7 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
     summary="Create a new task",
 )
-async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+async def create_task(task: TaskCreate, room_id: int = Query(None, description="Optional room ID to associate the task with"), db: Session = Depends(get_db)):
     """
     Create a new task.
 
@@ -112,6 +131,18 @@ async def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     Returns:
         TaskResponse: The created task
     """
+    task_data = task.model_dump()
+
+    if room_id is not None:
+        # Check if the room exists
+        room = db.query(Room).filter(Room.id == room_id).first()
+        if not room:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Room with ID {room_id} not found",
+            )
+        task_data["room_id"] = room_id
+
     new_task = Task(**task.model_dump())
     db.add(new_task)
     db.commit()
@@ -277,7 +308,7 @@ async def create_room(room: RoomCreate, db: Session = Depends(get_db)):
         
         return new_room
         
-    except SQLAlchemyError as e:
+    except SQLAlchemyError as e:  # noqa: F841
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -355,7 +386,7 @@ async def join_room(join_request: RoomJoinRequest, db: Session = Depends(get_db)
             "room_name": room.name,
             "room_id": room.id
         }
-    except SQLAlchemyError as e:
+    except SQLAlchemyError as e:  # noqa: F841
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -406,6 +437,12 @@ async def join_room(join_request: RoomJoinRequest, db: Session = Depends(get_db)
 @sio.on('connect')
 async def handle_connect(sid, environ):
     """Handle client connection"""
+    session_data = {
+        "sid": sid,
+        "connected_at": datetime.now().isoformat()
+    }
+    redis_manager.store_socket_session(sid, session_data)
+
     await sio.emit('connection_established', {
         "status": "connected",
         "sid": sid
@@ -416,25 +453,49 @@ async def handle_connect(sid, environ):
 async def handle_disconnect(sid):
     """Handle client disconnection"""
     # Get user's active rooms and notify others
-    rooms = sio.rooms(sid)
-    for room in rooms:
-        if room != sid:  # Don't process the user's personal room
-            await sio.emit('user_disconnected', {
-                "sid": sid
-            }, room=room)
+    session = redis_manager.get_socket_session(sid)
+    if session:
+        # Clean up room memberships
+        for room in sio.rooms(sid):
+            if room != sid:  # Don't process the user's personal room
+                redis_manager.remove_user_from_room(room, sid)
+                await sio.emit('user_disconnected', {
+                    "sid": sid,
+                    "user": session.get('user_data')
+                }, room=room)
+    
+    # Remove session data
+    redis_manager.remove_socket_session(sid)
 
 @sio.on('join_room')
 async def handle_room_join(sid, data):
     """Handle real-time room joining"""
     room_id = data.get('room_id')
+    user_data = data.get('user_data', {})
+    
     if room_id:
+        # Add user to Socket.IO room
         sio.enter_room(sid, f"room_{room_id}")
+        
+        # Store room membership in Redis
+        user_data.update({
+            "sid": sid,
+            "joined_at": datetime.now().isoformat()
+        })
+        redis_manager.add_user_to_room(f"room_{room_id}", user_data)
+        
+        # Get current room members
+        room_members = redis_manager.get_room_members(f"room_{room_id}")
+        
+        # Notify room about new member
         await sio.emit('room_joined', {
             "room_id": room_id,
-            "status": "connected"
+            "user": user_data,
+            "current_members": list(room_members.values())
         }, room=f"room_{room_id}")
+
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+    uvicorn.run(socket_app, host="0.0.0.0", port=8000)
