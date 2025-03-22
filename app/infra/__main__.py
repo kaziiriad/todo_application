@@ -1,327 +1,381 @@
-"""An AWS Python Pulumi program"""
+"""A minimal AWS Python Pulumi program for deploying the task application with Redis"""
 
 import pulumi
-import pulumi_aws as aws 
+import pulumi_aws as aws
+from user_data import get_frontend_user_data, get_backend_user_data, get_db_user_data, get_redis_user_data
 
-from user_data import get_frontend_user_data, get_backend_user_data, get_database_user_data, get_nginx_alb_user_data
-from asg import create_asg
-import json
-
+# Configuration
 config = pulumi.Config()
 db_user = config.get('database:user') or 'myuser'
-db_password = config.get_secret('database:password')
+db_password = config.get_secret('database:password') or 'mypassword'
 db_name = config.get('database:name') or 'mydb'
 region = config.get('aws:region')
 
-from ec2 import EC2Instance
-from security_groups import SecurityGroup
-from vpc import VPC
-
-KEY_PAIR_NAME = 'MyNewKeyPair3'
-
-# Add at the beginning of __main__.py
-# Create IAM role for Nginx ALB
-
-# lb_docker_compose = """
-# version: '3'
-# services:
-#   nginx:
-#     image: nginx:alpine
-#     ports:
-#       - "80:80"
-#       - "443:443"
-#     volumes:
-#       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
-#     restart: always
-# """
-
-
-# create a VPC
-vpc_module = VPC('my-vpc', cider_block='10.0.0.0/16')
-
-# create subnets
-public_subnets_1 = vpc_module.create_subnet( # public subnets
-    cidr_block='10.0.1.0/24',
-    availability_zone='ap-southeast-1a',
-    name='public-subnet-1',
-    map_public_ip_on_launch=True
+# Create a VPC
+vpc = aws.ec2.Vpc("minimal-vpc",
+    cidr_block="10.0.0.0/16",
+    enable_dns_hostnames=True,
+    enable_dns_support=True,
+    tags={"Name": "minimal-vpc"}
 )
 
-public_subnets_2 = vpc_module.create_subnet( # public subnets
-    cidr_block='10.0.3.0/24',
-    availability_zone='ap-southeast-1b',
-    name='public-subnet-2',
-    map_public_ip_on_launch=True
+# Create one public and one private subnet
+public_subnet = aws.ec2.Subnet("public-subnet",
+    vpc_id=vpc.id,
+    cidr_block="10.0.1.0/24",
+    availability_zone="ap-southeast-1a",
+    map_public_ip_on_launch=True,
+    tags={"Name": "public-subnet"}
 )
 
-private_subnets_1 = vpc_module.create_subnet( # private subnets
-    cidr_block='10.0.2.0/24',
-    availability_zone='ap-southeast-1a',
-    name='private-subnet-1'
+private_subnet = aws.ec2.Subnet("private-subnet",
+    vpc_id=vpc.id,
+    cidr_block="10.0.2.0/24",
+    availability_zone="ap-southeast-1a",
+    tags={"Name": "private-subnet"}
 )
 
-private_subnets_2 = vpc_module.create_subnet( # private subnets
-    cidr_block='10.0.4.0/24',
-    availability_zone='ap-southeast-1b',
-    name='private-subnet-2'
+# Create a second private subnet for Redis (needed for subnet group)
+private_subnet_2 = aws.ec2.Subnet("private-subnet-2",
+    vpc_id=vpc.id,
+    cidr_block="10.0.3.0/24",
+    availability_zone="ap-southeast-1b",  # Different AZ for better isolation
+    tags={"Name": "private-subnet-2"}
 )
 
-# create route tables
-public_route_table = vpc_module.create_route_table( # public route table
-    name='public-route-table'
-
-)
-private_route_table = vpc_module.create_route_table( # private route table
-    name='private-route-table'
+# Create an Internet Gateway
+igw = aws.ec2.InternetGateway("igw",
+    vpc_id=vpc.id,
+    tags={"Name": "minimal-igw"}
 )
 
-# create gateways
-internet_gateway = vpc_module.create_internet_gateway( # internet gateway
-    name='my-internet-gateway'
+# Create a route table for the public subnet
+public_rt = aws.ec2.RouteTable("public-rt",
+    vpc_id=vpc.id,
+    tags={"Name": "public-rt"}
+)
+
+# Create a route to the Internet Gateway
+public_route = aws.ec2.Route("public-route",
+    route_table_id=public_rt.id,
+    destination_cidr_block="0.0.0.0/0",
+    gateway_id=igw.id
+)
+
+# Associate the public route table with the public subnet
+public_rt_assoc = aws.ec2.RouteTableAssociation("public-rt-assoc",
+    subnet_id=public_subnet.id,
+    route_table_id=public_rt.id
+)
+
+# Create a NAT Gateway for the private subnet
+eip = aws.ec2.Eip("nat-eip",
+    # vpc=True,  # This is deprecated
+    domain="vpc",  # This is the recommended replacement
+    tags={"Name": "nat-eip"}
+)
+
+nat_gateway = aws.ec2.NatGateway("nat-gateway",
+    allocation_id=eip.id,
+    subnet_id=public_subnet.id,
+    tags={"Name": "nat-gateway"}
+)
+
+# Create a route table for the private subnets
+private_rt = aws.ec2.RouteTable("private-rt",
+    vpc_id=vpc.id,
+    tags={"Name": "private-rt"}
+)
+
+# Create a route to the NAT Gateway
+private_route = aws.ec2.Route("private-route",
+    route_table_id=private_rt.id,
+    destination_cidr_block="0.0.0.0/0",
+    nat_gateway_id=nat_gateway.id
+)
+
+# Associate the private route table with the private subnets
+private_rt_assoc = aws.ec2.RouteTableAssociation("private-rt-assoc",
+    subnet_id=private_subnet.id,
+    route_table_id=private_rt.id
+)
+
+private_rt_assoc_2 = aws.ec2.RouteTableAssociation("private-rt-assoc-2",
+    subnet_id=private_subnet_2.id,
+    route_table_id=private_rt.id
+)
+
+# Create security groups
+alb_sg = aws.ec2.SecurityGroup("alb-sg",
+    vpc_id=vpc.id,
+    description="Security group for ALB",
+    ingress=[
+        {
+            "protocol": "tcp",
+            "from_port": 80,
+            "to_port": 80,
+            "cidr_blocks": ["0.0.0.0/0"],
+            "description": "Allow HTTP"
+        }
+    ],
+    egress=[
+        {
+            "protocol": "-1",
+            "from_port": 0,
+            "to_port": 0,
+            "cidr_blocks": ["0.0.0.0/0"],
+            "description": "Allow all outbound traffic"
+        }
+    ],
+    tags={"Name": "alb-sg"}
+)
+
+app_sg = aws.ec2.SecurityGroup("app-sg",
+    vpc_id=vpc.id,
+    description="Security group for application instances",
+    ingress=[
+        {
+            "protocol": "tcp",
+            "from_port": 80,
+            "to_port": 80,
+            "security_groups": [alb_sg.id],
+            "description": "Allow HTTP from ALB"
+        },
+        {
+            "protocol": "tcp",
+            "from_port": 8000,
+            "to_port": 8000,
+            "security_groups": [alb_sg.id],
+            "description": "Allow API traffic from ALB"
+        },
+        {
+            "protocol": "tcp",
+            "from_port": 22,
+            "to_port": 22,
+            "cidr_blocks": ["0.0.0.0/0"],  # Restrict this in production
+            "description": "Allow SSH"
+        }
+    ],
+    egress=[
+        {
+            "protocol": "-1",
+            "from_port": 0,
+            "to_port": 0,
+            "cidr_blocks": ["0.0.0.0/0"],
+            "description": "Allow all outbound traffic"
+        }
+    ],
+    tags={"Name": "app-sg"}
+)
+
+db_sg = aws.ec2.SecurityGroup("db-sg",
+    vpc_id=vpc.id,
+    description="Security group for database",
+    ingress=[
+        {
+            "protocol": "tcp",
+            "from_port": 5432,
+            "to_port": 5432,
+            "security_groups": [app_sg.id],
+            "description": "Allow PostgreSQL from app"
+        },
+        {
+            "protocol": "tcp",
+            "from_port": 22,
+            "to_port": 22,
+            "cidr_blocks": ["0.0.0.0/0"],  # Restrict this in production
+            "description": "Allow SSH"
+        }
+    ],
+    egress=[
+        {
+            "protocol": "-1",
+            "from_port": 0,
+            "to_port": 0,
+            "cidr_blocks": ["0.0.0.0/0"],
+            "description": "Allow all outbound traffic"
+        }
+    ],
+    tags={"Name": "db-sg"}
+)
+
+# Create Redis security group
+redis_sg = aws.ec2.SecurityGroup("redis-sg",
+    vpc_id=vpc.id,
+    description="Security group for Redis",
+    ingress=[
+        {
+            "protocol": "tcp",
+            "from_port": 6379,
+            "to_port": 6379,
+            "security_groups": [app_sg.id],
+            "description": "Allow Redis traffic from app"
+        },
+        {
+            "protocol": "tcp",
+            "from_port": 22,
+            "to_port": 22,
+            "cidr_blocks": ["0.0.0.0/0"],  # Restrict this in production
+            "description": "Allow SSH"
+        }
+    ],
+    egress=[
+        {
+            "protocol": "-1",
+            "from_port": 0,
+            "to_port": 0,
+            "cidr_blocks": ["0.0.0.0/0"],
+            "description": "Allow all outbound traffic"
+        }
+    ],
+    tags={"Name": "redis-sg"}
 )
 
 
-nat_gateway_1 = vpc_module.create_nat_gateway( # nat gateway
-    name="my-nat-gateway-1",
-    subnet_id=public_subnets_1.id
+
+# Create EC2 instance for PostgreSQL database instead of RDS
+db_instance = aws.ec2.Instance("db-instance",
+    ami='ami-01938df366ac2d954',
+    instance_type="t3.micro",
+    subnet_id=private_subnet.id,
+    vpc_security_group_ids=[db_sg.id],
+    user_data=get_db_user_data(db_user, db_password, db_name),
+    tags={"Name": "postgres-db-instance"}
 )
-# nat_gateway_2 = vpc_module.create_nat_gateway( # nat gateway
-#     name="my-nat-gateway-2",
-#     subnet_id=public_subnets_2.id
+
+# Create EC2 instance for Redis instead of ElastiCache
+redis_instance = aws.ec2.Instance("redis-instance",
+    ami='ami-01938df366ac2d954',
+    instance_type="t3.micro",
+    subnet_id=private_subnet.id,
+    vpc_security_group_ids=[redis_sg.id],
+    user_data=get_redis_user_data(),
+    tags={"Name": "redis-instance"}
+)
+
+# Create target groups for the ALB
+frontend_tg = aws.lb.TargetGroup("frontend-tg",
+    port=80,
+    protocol="HTTP",
+    vpc_id=vpc.id,
+    health_check={
+        "enabled": True,
+        "path": "/",
+        "port": "traffic-port",
+        "protocol": "HTTP",
+        "healthy_threshold": 2,
+        "unhealthy_threshold": 2,
+        "timeout": 5,
+        "interval": 30,
+        "matcher": "200-399"
+    },
+    tags={"Name": "frontend-tg"}
+)
+
+backend_tg = aws.lb.TargetGroup("backend-tg",
+    port=8000,
+    protocol="HTTP",
+    vpc_id=vpc.id,
+    health_check={
+        "enabled": True,
+        "path": "/health",
+        "port": "traffic-port",
+        "protocol": "HTTP",
+        "healthy_threshold": 2,
+        "unhealthy_threshold": 2,
+        "timeout": 5,
+        "interval": 30,
+        "matcher": "200-399"
+    },
+    tags={"Name": "backend-tg"}
+)
+
+# Create an ALB
+alb = aws.lb.LoadBalancer("app-alb",
+    internal=False,
+    load_balancer_type="application",
+    security_groups=[alb_sg.id],
+    subnets=[public_subnet.id, private_subnet_2.id],  # Need 2 subnets for ALB
+    enable_deletion_protection=False,
+    tags={"Name": "app-alb"}
+)
+
+# Create ALB listeners
+http_listener = aws.lb.Listener("http-listener",
+    load_balancer_arn=alb.arn,
+    port=80,
+    default_actions=[{
+        "type": "forward",
+        "target_group_arn": frontend_tg.arn
+    }]
+)
+
+# Add a rule to route API traffic to the backend target group
+api_listener_rule = aws.lb.ListenerRule("api-listener-rule",
+    listener_arn=http_listener.arn,
+    priority=100,
+    actions=[{
+        "type": "forward",
+        "target_group_arn": backend_tg.arn
+    }],
+    conditions=[{
+        "path_pattern": {
+            "values": ["/tasks/*", "/health"]
+        }
+    }]
+)
+
+# Create EC2 instances
+# ami = aws.ec2.get_ami(
+#     most_recent=True,
+#     owners=["amazon"],
+#     filters=[{"name": "name", "values": ["amzn2-ami-hvm-*-x86_64-gp2"]}]
 # )
 
-# create route table associations
-vpc_module.create_route_table_association( # associate public route table with public subnets
-    name="public-1",
-    route_table_id=public_route_table.id,
-    subnet_id=public_subnets_1.id
-)
-
-vpc_module.create_route_table_association( # associate public route table with public subnets
-    name="public-2",
-    route_table_id=public_route_table.id,
-    subnet_id=public_subnets_2.id
-)
-
-vpc_module.create_route_table_association( # associate private route table with private subnets
-    name="private-1",    
-    route_table_id=private_route_table.id,
-    subnet_id=private_subnets_1.id
-)
-
-vpc_module.create_route_table_association( # associate private route table with private subnets
-    name="private-2",
-    route_table_id=private_route_table.id,
-    subnet_id=private_subnets_2.id
-)
-
-# create routes
-igw_route = vpc_module.create_route( # route to internet gateway
-    name="my-internet-gateway",
-    route_table_id=public_route_table.id,
-    destination_cidr_block='0.0.0.0/0',
-    gateway_id=internet_gateway.id
-)
-
-nat_gw_route_1 = vpc_module.create_route( # route to nat gateway
-    name="my-nat-gateway-1",
-    route_table_id=private_route_table.id,
-    destination_cidr_block='0.0.0.0/0',
-    nat_gateway_id=nat_gateway_1.id
-)
-
-
-# create security groups
-app_security_group = SecurityGroup('app-security-group', vpc_id=vpc_module.vpc.id)
-lb_security_group = SecurityGroup('lb-security-group', vpc_id=vpc_module.vpc.id)
-db_security_group = SecurityGroup('db-security-group', vpc_id=vpc_module.vpc.id)
-
-lb_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=80,
-    to_port=80,
-    cidr_blocks=['0.0.0.0/0'],
-    description='Allow HTTP traffic'
-)
-lb_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=443,
-    to_port=443,
-    cidr_blocks=['0.0.0.0/0'],
-    description='Allow HTTPS traffic'
-
-)
-lb_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=22,
-    to_port=22,
-    cidr_blocks=['0.0.0.0/0'],
-    description='Allow SSH traffic'
-)
-
-lb_security_group.create_egress_rule(
-    protocol='-1',
-    from_port=0,
-    to_port=0,
-    cidr_blocks=["0.0.0.0/0"],
-    description='Allow outbound traffic'
-)
-
-app_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=80,
-    to_port=80,
-    description='Allow HTTP traffic',
-    source_security_group_id=lb_security_group.id
-)
-
-app_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=443,
-    to_port=443,
-    description='Allow HTTPS traffic',
-    source_security_group_id=lb_security_group.id
-)
-
-app_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=22,
-    to_port=22,
-    cidr_blocks=['0.0.0.0/0'],
-    description='Allow SSH traffic',
-)
-
-app_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=8000,
-    to_port=8000,
-    description='Allow HTTP traffic',
-    source_security_group_id=lb_security_group.id
-)
-
-app_security_group.create_egress_rule(
-    protocol='-1',
-    from_port=0,
-    to_port=0,
-    cidr_blocks=["0.0.0.0/0"],
-    description='Allow outbound traffic'
-)
-
-app_security_group.create_egress_rule(
-    protocol='tcp',
-    from_port=5432,
-    to_port=5432,
-    description='Allow PostgreSQL traffic',
-    source_security_group_id=db_security_group.id
-)
-
-
-db_security_group.create_ingress_rule(
-    protocol='tcp',
-    from_port=5432,
-    to_port=5432,
-    description='Allow PostgreSQL traffic',
-    source_security_group_id=app_security_group.id
-)
-
-db_security_group.create_egress_rule(
-    protocol='-1',
-    from_port=0,
-    to_port=0,
-    cidr_blocks=["0.0.0.0/0"],
-    description='Allow outbound traffic'
-)
-
-
-# create instances
-instance_module = EC2Instance()
-
-
-# create load balancer
-
-
-# create frontend instances
-
-database_instance = instance_module.create(
-    name='database_instance',
-    number=1,
-    security_groups=[db_security_group.id],
-    key_name=KEY_PAIR_NAME,
-    subnet_id=private_subnets_1.id,
-    user_data=get_database_user_data(
-        db_user,
-        db_password,
-        db_name
-    )
-)
-
-nginx_alb = instance_module.create(
-    name='nginx-alb',
-    number=1,
-    security_groups=[lb_security_group.id],
-    key_name=KEY_PAIR_NAME,
-    subnet_id=public_subnets_1.id,
-    user_data=get_nginx_alb_user_data(
-        region    
-    ),
-    associate_public_ip_address=True
-)
-
-
-
-frontend_lt = aws.ec2.LaunchTemplate("frontend-lt",
-    name_prefix="frontend-",
-    image_id="ami-047126e50991d067b",
-    instance_type="t2.micro",
-    vpc_security_group_ids=[app_security_group.id],
+# Frontend instance
+frontend_instance = aws.ec2.Instance("frontend-instance",
+    ami='ami-01938df366ac2d954',
+    instance_type="t3.micro",
+    subnet_id=private_subnet.id,
+    vpc_security_group_ids=[app_sg.id],
     user_data=get_frontend_user_data(
-        nginx_alb_dns=nginx_alb.private_ip,  # Use Nginx ALB DNS
+        f"http://{alb.dns_name}/tasks"
     ),
-    key_name=KEY_PAIR_NAME
+    tags={"Name": "frontend-instance"}
 )
 
-backend_lt = aws.ec2.LaunchTemplate("backend-lt",
-    name_prefix="backend-",
-    image_id="ami-047126e50991d067b",  # Use your AMI ID
-    instance_type="t2.micro",
-    vpc_security_group_ids=[app_security_group.id],
+# Backend instance
+backend_instance = aws.ec2.Instance("backend-instance",
+    ami='ami-01938df366ac2d954',
+    instance_type="t3.micro",
+    subnet_id=private_subnet.id,
+    vpc_security_group_ids=[app_sg.id],
     user_data=get_backend_user_data(
-        database_instance.private_ip,
-        db_user,
-        db_password,
-        db_name
+        db_host=db_instance.private_ip,
+        db_user=db_user,
+        db_password=db_password,
+        db_name=db_name,
+        redis_host=redis_instance.private_ip
     ),
-    key_name=KEY_PAIR_NAME
+    tags={"Name": "backend-instance"}
 )
 
-
-frontend_asg = create_asg(
-    name="frontend",
-    launch_template_id=frontend_lt.id,
-    vpc_zone_identifiers=[public_subnets_1.id, public_subnets_2.id],
-    health_check_type="EC2",  # Changed from ELB to EC2
-    health_check_grace_period=300,
-    target_group_arns=None,  # If you're not using ALB target groups
-    min_size=1,  # At least 1 instances for high availability
-    max_size=3,  # Allow scaling up to 3 instances
-    desired_capacity=2,
-
+# Register instances with target groups
+frontend_attachment = aws.lb.TargetGroupAttachment("frontend-attachment",
+    target_group_arn=frontend_tg.arn,
+    target_id=frontend_instance.id,
+    port=80
 )
 
-backend_asg = create_asg(
-    name="backend",
-    launch_template_id=backend_lt.id,
-    vpc_zone_identifiers=[private_subnets_1.id, private_subnets_2.id],
-    health_check_type="EC2",  # Changed from ELB to EC2
-    health_check_grace_period=300,
-    target_group_arns=None,
-    min_size=1,  # At least 1 instances for high availability
-    max_size=3,  # Allow scaling up to 3 instances
-    desired_capacity=2,
+backend_attachment = aws.lb.TargetGroupAttachment("backend-attachment",
+    target_group_arn=backend_tg.arn,
+    target_id=backend_instance.id,
+    port=8000
 )
 
-pulumi.export("nginx_alb_1_public_ip", nginx_alb.public_ip)
-pulumi.export("database_private_ip", database_instance.private_ip)
-pulumi.export("frontend_asg_name", frontend_asg["asg"].name)
-pulumi.export("backend_asg_name", backend_asg["asg"].name)
-
+# Export outputs
+pulumi.export("alb_dns_name", alb.dns_name)
+pulumi.export("db_endpoint", db_instance.private_ip)
+pulumi.export("redis_endpoint", redis_instance.private_ip)
+pulumi.export("frontend_instance_id", frontend_instance.id)
+pulumi.export("backend_instance_id", backend_instance.id)

@@ -1,0 +1,594 @@
+{
+    "version": 3,
+    "deployment": {
+        "manifest": {
+            "time": "2025-03-23T04:51:54.527164799+06:00",
+            "magic": "c3bfd614266a0f4e72f19e067c9a1b193ae90e14be2376d9f2b0d4f25fd81b7a",
+            "version": "v3.157.0"
+        },
+        "secrets_providers": {
+            "type": "service",
+            "state": {
+                "url": "https://api.pulumi.com",
+                "owner": "kaziiriad",
+                "project": "infra",
+                "stack": "dev"
+            }
+        },
+        "metadata": {},
+        "resources": [
+            {
+                "urn": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "custom": false,
+                "type": "pulumi:pulumi:Stack",
+                "outputs": {
+                    "backend_asg_name": "backend-asg-3ef711d",
+                    "database_private_ip": "10.0.2.199",
+                    "frontend_asg_name": "frontend-asg-43ee72e",
+                    "nginx_alb_1_public_ip": "54.255.126.45"
+                },
+                "created": "2024-12-05T09:56:30.896602896Z",
+                "modified": "2024-12-05T09:56:30.896602896Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi/runtime/stack.py#142"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0",
+                "custom": true,
+                "id": "536e06f0-5236-4ef5-a3fd-1dafdef8fb07",
+                "type": "pulumi:providers:aws",
+                "inputs": {
+                    "__internal": {},
+                    "skipCredentialsValidation": "false",
+                    "skipRegionValidation": "true",
+                    "version": "6.61.0"
+                },
+                "outputs": {
+                    "skipCredentialsValidation": "false",
+                    "skipRegionValidation": "true",
+                    "version": "6.61.0"
+                },
+                "created": "2025-03-22T21:19:56.505910971Z",
+                "modified": "2025-03-22T21:19:56.505910971Z"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/eip:Eip::nat-eip",
+                "custom": true,
+                "id": "eipalloc-0a798f67cb3a9e25e",
+                "type": "aws:ec2/eip:Eip",
+                "inputs": {
+                    "__defaults": [],
+                    "domain": "vpc",
+                    "tags": {
+                        "Name": "nat-eip"
+                    },
+                    "tagsAll": {
+                        "Name": "nat-eip"
+                    }
+                },
+                "outputs": {
+                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"delete\":180000000000,\"read\":900000000000,\"update\":300000000000}}",
+                    "address": null,
+                    "allocationId": "eipalloc-0a798f67cb3a9e25e",
+                    "arn": "arn:aws:ec2:ap-southeast-1:206901878383:elastic-ip/eipalloc-0a798f67cb3a9e25e",
+                    "associateWithPrivateIp": null,
+                    "associationId": "",
+                    "carrierIp": "",
+                    "customerOwnedIp": "",
+                    "customerOwnedIpv4Pool": "",
+                    "domain": "vpc",
+                    "id": "eipalloc-0a798f67cb3a9e25e",
+                    "instance": "",
+                    "ipamPoolId": null,
+                    "networkBorderGroup": "ap-southeast-1",
+                    "networkInterface": "",
+                    "privateDns": null,
+                    "privateIp": "",
+                    "ptrRecord": "",
+                    "publicDns": "ec2-3-0-248-92.ap-southeast-1.compute.amazonaws.com",
+                    "publicIp": "3.0.248.92",
+                    "publicIpv4Pool": "amazon",
+                    "tags": {
+                        "Name": "nat-eip"
+                    },
+                    "tagsAll": {
+                        "Name": "nat-eip"
+                    },
+                    "vpc": true
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::536e06f0-5236-4ef5-a3fd-1dafdef8fb07",
+                "propertyDependencies": {
+                    "domain": [],
+                    "tags": []
+                },
+                "created": "2025-03-22T21:19:58.297005273Z",
+                "modified": "2025-03-22T21:19:58.297005273Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/eip.py#851"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc",
+                "custom": true,
+                "id": "vpc-0d4136259675e7b76",
+                "type": "aws:ec2/vpc:Vpc",
+                "inputs": {
+                    "__defaults": [],
+                    "cidrBlock": "10.0.0.0/16",
+                    "enableDnsHostnames": true,
+                    "enableDnsSupport": true,
+                    "tags": {
+                        "Name": "minimal-vpc"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-vpc"
+                    }
+                },
+                "outputs": {
+                    "__meta": "{\"schema_version\":\"1\"}",
+                    "arn": "arn:aws:ec2:ap-southeast-1:206901878383:vpc/vpc-0d4136259675e7b76",
+                    "assignGeneratedIpv6CidrBlock": false,
+                    "cidrBlock": "10.0.0.0/16",
+                    "defaultNetworkAclId": "acl-01a276ece27e9e3d8",
+                    "defaultRouteTableId": "rtb-00bb56e0f53e19b97",
+                    "defaultSecurityGroupId": "sg-0b458bccbd0bc24c5",
+                    "dhcpOptionsId": "dopt-0aa4d91d02627a4ba",
+                    "enableDnsHostnames": true,
+                    "enableDnsSupport": true,
+                    "enableNetworkAddressUsageMetrics": false,
+                    "id": "vpc-0d4136259675e7b76",
+                    "instanceTenancy": "default",
+                    "ipv4IpamPoolId": null,
+                    "ipv4NetmaskLength": null,
+                    "ipv6AssociationId": "",
+                    "ipv6CidrBlock": "",
+                    "ipv6CidrBlockNetworkBorderGroup": "",
+                    "ipv6IpamPoolId": "",
+                    "ipv6NetmaskLength": 0,
+                    "mainRouteTableId": "rtb-00bb56e0f53e19b97",
+                    "ownerId": "206901878383",
+                    "tags": {
+                        "Name": "minimal-vpc"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-vpc"
+                    }
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::536e06f0-5236-4ef5-a3fd-1dafdef8fb07",
+                "propertyDependencies": {
+                    "cidrBlock": [],
+                    "enableDnsHostnames": [],
+                    "enableDnsSupport": [],
+                    "tags": []
+                },
+                "created": "2025-03-22T21:20:09.38181845Z",
+                "modified": "2025-03-22T21:20:09.38181845Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/vpc.py#772"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/internetGateway:InternetGateway::igw",
+                "custom": true,
+                "id": "igw-0337042bfaed15b7f",
+                "type": "aws:ec2/internetGateway:InternetGateway",
+                "inputs": {
+                    "__defaults": [],
+                    "tags": {
+                        "Name": "minimal-igw"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-igw"
+                    },
+                    "vpcId": "vpc-0d4136259675e7b76"
+                },
+                "outputs": {
+                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"create\":1200000000000,\"delete\":1200000000000,\"update\":1200000000000}}",
+                    "arn": "arn:aws:ec2:ap-southeast-1:206901878383:internet-gateway/igw-0337042bfaed15b7f",
+                    "id": "igw-0337042bfaed15b7f",
+                    "ownerId": "206901878383",
+                    "tags": {
+                        "Name": "minimal-igw"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-igw"
+                    },
+                    "vpcId": "vpc-0d4136259675e7b76"
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "dependencies": [
+                    "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc"
+                ],
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::536e06f0-5236-4ef5-a3fd-1dafdef8fb07",
+                "propertyDependencies": {
+                    "tags": [],
+                    "vpcId": [
+                        "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc"
+                    ]
+                },
+                "created": "2025-03-22T21:20:11.813982919Z",
+                "modified": "2025-03-22T21:20:11.813982919Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/internet_gateway.py#278"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0",
+                "custom": true,
+                "delete": true,
+                "id": "5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "type": "pulumi:providers:aws",
+                "inputs": {
+                    "__internal": {},
+                    "region": "ap-southeast-1",
+                    "skipCredentialsValidation": "false",
+                    "skipRegionValidation": "true",
+                    "version": "6.61.0"
+                },
+                "outputs": {
+                    "region": "ap-southeast-1",
+                    "skipCredentialsValidation": "false",
+                    "skipRegionValidation": "true",
+                    "version": "6.61.0"
+                },
+                "created": "2024-12-05T09:56:33.600135029Z",
+                "modified": "2024-12-05T09:56:33.600135029Z"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc",
+                "custom": true,
+                "delete": true,
+                "id": "vpc-0a85684544a6fffed",
+                "type": "aws:ec2/vpc:Vpc",
+                "inputs": {
+                    "__defaults": [],
+                    "cidrBlock": "10.0.0.0/16",
+                    "enableDnsHostnames": true,
+                    "enableDnsSupport": true,
+                    "tags": {
+                        "Name": "minimal-vpc"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-vpc"
+                    }
+                },
+                "outputs": {
+                    "__meta": "{\"schema_version\":\"1\"}",
+                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:vpc/vpc-0a85684544a6fffed",
+                    "assignGeneratedIpv6CidrBlock": false,
+                    "cidrBlock": "10.0.0.0/16",
+                    "defaultNetworkAclId": "acl-0b12715b47bc26acd",
+                    "defaultRouteTableId": "rtb-0185e26f4e3e990bb",
+                    "defaultSecurityGroupId": "sg-087f4c9f1919d0804",
+                    "dhcpOptionsId": "dopt-0a1f3eb5cb3adff59",
+                    "enableDnsHostnames": true,
+                    "enableDnsSupport": true,
+                    "enableNetworkAddressUsageMetrics": false,
+                    "id": "vpc-0a85684544a6fffed",
+                    "instanceTenancy": "default",
+                    "ipv4IpamPoolId": null,
+                    "ipv4NetmaskLength": null,
+                    "ipv6AssociationId": "",
+                    "ipv6CidrBlock": "",
+                    "ipv6CidrBlockNetworkBorderGroup": "",
+                    "ipv6IpamPoolId": "",
+                    "ipv6NetmaskLength": 0,
+                    "mainRouteTableId": "rtb-0185e26f4e3e990bb",
+                    "ownerId": "203918842107",
+                    "tags": {
+                        "Name": "minimal-vpc"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-vpc"
+                    }
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "propertyDependencies": {
+                    "cidrBlock": [],
+                    "enableDnsHostnames": [],
+                    "enableDnsSupport": [],
+                    "tags": []
+                },
+                "created": "2025-03-22T20:22:10.507978377Z",
+                "modified": "2025-03-22T20:22:10.507978377Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/vpc.py#772"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/eip:Eip::nat-eip",
+                "custom": true,
+                "delete": true,
+                "id": "eipalloc-0c77b7fcd7a7a2140",
+                "type": "aws:ec2/eip:Eip",
+                "inputs": {
+                    "__defaults": [],
+                    "domain": "vpc",
+                    "tags": {
+                        "Name": "nat-eip"
+                    },
+                    "tagsAll": {
+                        "Name": "nat-eip"
+                    }
+                },
+                "outputs": {
+                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"delete\":180000000000,\"read\":900000000000,\"update\":300000000000}}",
+                    "address": null,
+                    "allocationId": "eipalloc-0c77b7fcd7a7a2140",
+                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:elastic-ip/eipalloc-0c77b7fcd7a7a2140",
+                    "associateWithPrivateIp": null,
+                    "associationId": "",
+                    "carrierIp": "",
+                    "customerOwnedIp": "",
+                    "customerOwnedIpv4Pool": "",
+                    "domain": "vpc",
+                    "id": "eipalloc-0c77b7fcd7a7a2140",
+                    "instance": "",
+                    "ipamPoolId": null,
+                    "networkBorderGroup": "ap-southeast-1",
+                    "networkInterface": "",
+                    "privateDns": null,
+                    "privateIp": "",
+                    "ptrRecord": "",
+                    "publicDns": "ec2-18-139-10-187.ap-southeast-1.compute.amazonaws.com",
+                    "publicIp": "18.139.10.187",
+                    "publicIpv4Pool": "amazon",
+                    "tags": {
+                        "Name": "nat-eip"
+                    },
+                    "tagsAll": {
+                        "Name": "nat-eip"
+                    },
+                    "vpc": true
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "propertyDependencies": {
+                    "domain": [],
+                    "tags": []
+                },
+                "created": "2025-03-22T20:21:59.446566295Z",
+                "modified": "2025-03-22T20:21:59.446566295Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/eip.py#851"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/internetGateway:InternetGateway::igw",
+                "custom": true,
+                "delete": true,
+                "id": "igw-0f05d4c0d57c9a259",
+                "type": "aws:ec2/internetGateway:InternetGateway",
+                "inputs": {
+                    "__defaults": [],
+                    "tags": {
+                        "Name": "minimal-igw"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-igw"
+                    },
+                    "vpcId": "vpc-0a85684544a6fffed"
+                },
+                "outputs": {
+                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"create\":1200000000000,\"delete\":1200000000000,\"update\":1200000000000}}",
+                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:internet-gateway/igw-0f05d4c0d57c9a259",
+                    "id": "igw-0f05d4c0d57c9a259",
+                    "ownerId": "203918842107",
+                    "tags": {
+                        "Name": "minimal-igw"
+                    },
+                    "tagsAll": {
+                        "Name": "minimal-igw"
+                    },
+                    "vpcId": "vpc-0a85684544a6fffed"
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "dependencies": [
+                    "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc"
+                ],
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "propertyDependencies": {
+                    "tags": [],
+                    "vpcId": [
+                        "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc"
+                    ]
+                },
+                "created": "2025-03-22T20:22:16.694034231Z",
+                "modified": "2025-03-22T20:22:16.694034231Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/internet_gateway.py#278"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/eip:Eip::my-nat-gateway-1-eip",
+                "custom": true,
+                "id": "eipalloc-0bfc642800bc74c55",
+                "type": "aws:ec2/eip:Eip",
+                "inputs": {
+                    "__defaults": [],
+                    "domain": "vpc",
+                    "tags": {
+                        "Name": "my-nat-gateway-1-eip"
+                    },
+                    "tagsAll": {
+                        "Name": "my-nat-gateway-1-eip"
+                    }
+                },
+                "outputs": {
+                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"delete\":180000000000,\"read\":900000000000,\"update\":300000000000}}",
+                    "address": null,
+                    "allocationId": "eipalloc-0bfc642800bc74c55",
+                    "arn": "arn:aws:ec2:ap-southeast-1:474668414175:elastic-ip/eipalloc-0bfc642800bc74c55",
+                    "associateWithPrivateIp": null,
+                    "associationId": "",
+                    "carrierIp": "",
+                    "customerOwnedIp": "",
+                    "customerOwnedIpv4Pool": "",
+                    "domain": "vpc",
+                    "id": "eipalloc-0bfc642800bc74c55",
+                    "instance": "",
+                    "ipamPoolId": null,
+                    "networkBorderGroup": "ap-southeast-1",
+                    "networkInterface": "",
+                    "privateDns": null,
+                    "privateIp": "",
+                    "ptrRecord": "",
+                    "publicDns": "ec2-54-251-158-52.ap-southeast-1.compute.amazonaws.com",
+                    "publicIp": "54.251.158.52",
+                    "publicIpv4Pool": "amazon",
+                    "tags": {
+                        "Name": "my-nat-gateway-1-eip"
+                    },
+                    "tagsAll": {
+                        "Name": "my-nat-gateway-1-eip"
+                    },
+                    "vpc": true
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "propertyDependencies": {
+                    "domain": [],
+                    "tags": []
+                },
+                "created": "2024-12-05T09:56:36.29647025Z",
+                "modified": "2024-12-05T09:56:36.29647025Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/eip.py#851"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::my-vpc",
+                "custom": true,
+                "id": "vpc-0c2b0745f078640c2",
+                "type": "aws:ec2/vpc:Vpc",
+                "inputs": {
+                    "__defaults": [],
+                    "cidrBlock": "10.0.0.0/16",
+                    "enableDnsHostnames": true,
+                    "enableDnsSupport": true,
+                    "tags": {
+                        "Name": "my-vpc"
+                    },
+                    "tagsAll": {
+                        "Name": "my-vpc"
+                    }
+                },
+                "outputs": {
+                    "__meta": "{\"schema_version\":\"1\"}",
+                    "arn": "arn:aws:ec2:ap-southeast-1:474668414175:vpc/vpc-0c2b0745f078640c2",
+                    "assignGeneratedIpv6CidrBlock": false,
+                    "cidrBlock": "10.0.0.0/16",
+                    "defaultNetworkAclId": "acl-04a3f25110e2ba3f5",
+                    "defaultRouteTableId": "rtb-03f554e8e425e4240",
+                    "defaultSecurityGroupId": "sg-03efb1d0742e75518",
+                    "dhcpOptionsId": "dopt-0a2f53a054e61d055",
+                    "enableDnsHostnames": true,
+                    "enableDnsSupport": true,
+                    "enableNetworkAddressUsageMetrics": false,
+                    "id": "vpc-0c2b0745f078640c2",
+                    "instanceTenancy": "default",
+                    "ipv4IpamPoolId": null,
+                    "ipv4NetmaskLength": null,
+                    "ipv6AssociationId": "",
+                    "ipv6CidrBlock": "",
+                    "ipv6CidrBlockNetworkBorderGroup": "",
+                    "ipv6IpamPoolId": "",
+                    "ipv6NetmaskLength": 0,
+                    "mainRouteTableId": "rtb-03f554e8e425e4240",
+                    "ownerId": "474668414175",
+                    "tags": {
+                        "Name": "my-vpc"
+                    },
+                    "tagsAll": {
+                        "Name": "my-vpc"
+                    }
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "propertyDependencies": {
+                    "cidrBlock": [],
+                    "enableDnsHostnames": [],
+                    "enableDnsSupport": [],
+                    "tags": []
+                },
+                "created": "2024-12-05T09:56:46.917644786Z",
+                "modified": "2024-12-05T09:56:46.917644786Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/vpc.py#772"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:ec2/internetGateway:InternetGateway::my-internet-gateway",
+                "custom": true,
+                "id": "igw-0a7da83d290242724",
+                "type": "aws:ec2/internetGateway:InternetGateway",
+                "inputs": {
+                    "__defaults": [],
+                    "tags": {
+                        "Name": "my-internet-gateway"
+                    },
+                    "tagsAll": {
+                        "Name": "my-internet-gateway"
+                    },
+                    "vpcId": "vpc-0c2b0745f078640c2"
+                },
+                "outputs": {
+                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"create\":1200000000000,\"delete\":1200000000000,\"update\":1200000000000}}",
+                    "arn": "arn:aws:ec2:ap-southeast-1:474668414175:internet-gateway/igw-0a7da83d290242724",
+                    "id": "igw-0a7da83d290242724",
+                    "ownerId": "474668414175",
+                    "tags": {
+                        "Name": "my-internet-gateway"
+                    },
+                    "tagsAll": {
+                        "Name": "my-internet-gateway"
+                    },
+                    "vpcId": "vpc-0c2b0745f078640c2"
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "dependencies": [
+                    "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::my-vpc"
+                ],
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "propertyDependencies": {
+                    "tags": [],
+                    "vpcId": [
+                        "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::my-vpc"
+                    ]
+                },
+                "created": "2024-12-05T12:12:41.634403587Z",
+                "modified": "2024-12-05T12:12:41.634403587Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/internet_gateway.py#278"
+            },
+            {
+                "urn": "urn:pulumi:dev::infra::aws:iam/role:Role::nginx-role",
+                "custom": true,
+                "id": "nginx-role-f273f80",
+                "type": "aws:iam/role:Role",
+                "inputs": {
+                    "__defaults": [
+                        "forceDetachPolicies",
+                        "maxSessionDuration",
+                        "name",
+                        "path"
+                    ],
+                    "assumeRolePolicy": "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Action\": \"sts:AssumeRole\", \"Effect\": \"Allow\", \"Principal\": {\"Service\": \"ec2.amazonaws.com\"}}]}",
+                    "forceDetachPolicies": false,
+                    "maxSessionDuration": 3600,
+                    "name": "nginx-role-f273f80",
+                    "path": "/"
+                },
+                "outputs": {
+                    "arn": "arn:aws:iam::474668414175:role/nginx-role-f273f80",
+                    "assumeRolePolicy": "{\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"}}],\"Version\":\"2012-10-17\"}",
+                    "createDate": "2024-12-05T09:56:34Z",
+                    "description": "",
+                    "forceDetachPolicies": false,
+                    "id": "nginx-role-f273f80",
+                    "inlinePolicies": [],
+                    "managedPolicyArns": [],
+                    "maxSessionDuration": 3600,
+                    "name": "nginx-role-f273f80",
+                    "namePrefix": "",
+                    "path": "/",
+                    "permissionsBoundary": "",
+                    "uniqueId": "AROAW5BDRGTP6WMAFT65O"
+                },
+                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::5e28819b-0f7e-4181-84f7-a0bb54d20516",
+                "propertyDependencies": {
+                    "assumeRolePolicy": []
+                },
+                "created": "2024-12-05T09:56:36.540301272Z",
+                "modified": "2024-12-05T09:56:36.540301272Z",
+                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/iam/role.py#875"
+            }
+        ]
+    }
+}
