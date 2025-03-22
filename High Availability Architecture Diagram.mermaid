@@ -1,0 +1,51 @@
+graph TD
+    subgraph "AWS Cloud"
+        subgraph "Region"
+            subgraph "VPC"
+                ALB[Application Load Balancer]
+                
+                subgraph "Availability Zone 1"
+                    ASG1[Auto Scaling Group]
+                    FE1[Frontend Instances]
+                    BE1[Backend Instances]
+                    RDS1[(RDS Primary)]
+                    REDIS1[(ElastiCache Redis)]
+                end
+                
+                subgraph "Availability Zone 2"
+                    ASG2[Auto Scaling Group]
+                    FE2[Frontend Instances]
+                    BE2[Backend Instances]
+                    RDS2[(RDS Standby)]
+                    REDIS2[(ElastiCache Redis)]
+                end
+                
+                S3[(S3 Static Assets)]
+                ECR[(ECR Container Registry)]
+            end
+        end
+    end
+    
+    ALB --> FE1
+    ALB --> FE2
+    ALB --> BE1
+    ALB --> BE2
+    
+    FE1 --> BE1
+    FE2 --> BE2
+    FE1 -.-> BE2
+    FE2 -.-> BE1
+    
+    BE1 --> RDS1
+    BE2 --> RDS1
+    BE1 -.-> RDS2
+    BE2 -.-> RDS2
+    
+    BE1 --> REDIS1
+    BE2 --> REDIS1
+    BE1 -.-> REDIS2
+    BE2 -.-> REDIS2
+    
+    RDS1 <--> RDS2
+    REDIS1 <--> REDIS2
+```
