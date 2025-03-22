@@ -1,27 +1,19 @@
 
 services:
 
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - app-network
-
   frontend:
     build:
-      context: ./app/todo-frontend
+      context: ./app/frontend
       dockerfile: Dockerfile
     
     environment:
-      - BACKEND_URL=http://nginx  # Add this to configure nginx
+      - BACKEND_URL=http://backend:8000  # Add this to configure nginx
     networks:
       - app-network
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
     
   backend:
     build:
@@ -40,6 +32,8 @@ services:
     depends_on:
       - postgres
       - redis
+    ports:
+      - "8000:8000"
     networks:
       - app-network
 

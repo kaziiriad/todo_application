@@ -37,11 +37,11 @@ const Sidebar: React.FC = () => {
       path: '/tasks',
       icon: <CheckSquare className="h-5 w-5" />,
     },
-    {
-      name: 'Rooms',
-      path: '/rooms',
-      icon: <Users className="h-5 w-5" />,
-    },
+    // {
+    //   name: 'Rooms',
+    //   path: '/rooms',
+    //   icon: <Users className="h-5 w-5" />,
+    // },
   ];
 
   return (
@@ -127,7 +127,7 @@ const Sidebar: React.FC = () => {
 
           <Separator className="my-4" />
 
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             {!isCollapsed && <p className="px-3 text-xs font-semibold text-muted-foreground">Rooms</p>}
             
             <ul className="grid gap-1">
@@ -150,9 +150,9 @@ const Sidebar: React.FC = () => {
                 </li>
               ))}
             </ul>
-          </div>
+          </div> */}
 
-          <div className="mt-auto pt-4">
+          {/* <div className="mt-auto pt-4">
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className={cn("w-full", isCollapsed ? "px-2" : "")}>
@@ -182,7 +182,7 @@ const Sidebar: React.FC = () => {
                 <JoinRoomForm onSuccess={() => setIsJoinDialogOpen(false)} />
               </DialogContent>
             </Dialog>
-          </div>
+          </div> */}
         </nav>
       </aside>
     </>

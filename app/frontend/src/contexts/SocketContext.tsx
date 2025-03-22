@@ -1,6 +1,6 @@
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import React, { createContext, useContext, useState } from 'react';
+import { Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 
@@ -15,91 +15,28 @@ const SocketContext = createContext<SocketContextType | undefined>(undefined);
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
 
+  // This is a mock function that doesn't actually connect to any server
   const connectSocket = () => {
-    if (!isAuthenticated) return;
-
-    // Use your actual API URL here
-    const socketInstance = io('http://localhost:8000', {
-      auth: {
-        token: localStorage.getItem('authToken'),
-      },
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
-
-    setSocket(socketInstance);
-
-    // Socket event handlers
-    socketInstance.on('connect', () => {
-      console.log('Socket connected');
+    console.log('Mock socket connection - not actually connecting');
+    
+    // For debugging purposes, we can simulate a connected state
+    if (isAuthenticated) {
+      console.log('Mock: User is authenticated, simulating connected state');
       setIsConnected(true);
-    });
-
-    socketInstance.on('disconnect', () => {
-      console.log('Socket disconnected');
-      setIsConnected(false);
-    });
-
-    socketInstance.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-      setIsConnected(false);
-    });
-
-    // Event handlers for task-related events
-    socketInstance.on('task_created', (data) => {
-      toast.info(`New task created: ${data.title}`);
-    });
-
-    socketInstance.on('task_updated', (data) => {
-      toast.info(`Task updated: ${data.title}`);
-    });
-
-    socketInstance.on('task_deleted', (data) => {
-      toast.info(`Task deleted: ID ${data.id}`);
-    });
-
-    // Event handlers for room-related events
-    socketInstance.on('room_created', (data) => {
-      toast.info(`New room created: ${data.name}`);
-    });
-
-    socketInstance.on('participant_joined', (data) => {
-      toast.info(`${data.user_name} joined the room`);
-    });
-
-    socketInstance.on('user_disconnected', (data) => {
-      toast.info(`${data.user_name} disconnected`);
-    });
-
-    socketInstance.on('room_joined', (data) => {
-      toast.success(`You joined room: ${data.room_name}`);
-    });
-
-    return socketInstance;
+      
+      // You could simulate socket events here if needed
+      // For example: setTimeout(() => toast.info('Mock: Simulated event'), 2000);
+    }
+    
+    return null;
   };
 
-  useEffect(() => {
-    let socketInstance: Socket | null = null;
-    
-    if (isAuthenticated) {
-      socketInstance = connectSocket();
-    }
-
-    return () => {
-      if (socketInstance) {
-        socketInstance.disconnect();
-      }
-    };
-  }, [isAuthenticated, user?.id]);
-
+  // Mock reconnect function
   const reconnect = () => {
-    if (socket) {
-      socket.disconnect();
-    }
+    console.log('Mock socket reconnection - not actually reconnecting');
+    toast.info('Mock: Attempting to reconnect socket');
     connectSocket();
   };
 
@@ -123,3 +60,10 @@ export const useSocket = () => {
   }
   return context;
 };
+
+// Add mock socket event emitter functions if needed
+// Example:
+// export const mockEmitEvent = (eventName: string, data: any) => {
+//   console.log(`Mock: Emitting ${eventName} with data:`, data);
+//   toast.info(`Mock: Event ${eventName} emitted`);
+// };

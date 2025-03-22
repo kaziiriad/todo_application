@@ -1,8 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bell, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSocket } from '@/contexts/SocketContext';
+import axios from 'axios';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -15,7 +15,36 @@ import { Button } from '@/components/ui/button';
 
 const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
-  const { isConnected } = useSocket();
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+  const [checkingConnection, setCheckingConnection] = useState(true);
+  
+  // API URL from environment variables or default to localhost
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  
+  // Check backend connection status
+  useEffect(() => {
+    const checkBackendConnection = async () => {
+      try {
+        // Try to connect to the backend health endpoint
+        const response = await axios.get(`${API_URL}/health`, { timeout: 5000 });
+        setIsBackendConnected(response.status === 200);
+      } catch (error) {
+        console.error('Backend connection check failed:', error);
+        setIsBackendConnected(false);
+      } finally {
+        setCheckingConnection(false);
+      }
+    };
+
+    // Check connection immediately
+    checkBackendConnection();
+
+    // Set up periodic connection checks
+    const intervalId = setInterval(checkBackendConnection, 30000); // Check every 30 seconds
+
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId);
+  }, []);
 
   const getInitials = (name: string) => {
     return name
@@ -30,7 +59,12 @@ const Navbar: React.FC = () => {
       <div className="container flex h-16 items-center justify-between py-4">
         <div className="flex items-center gap-2">
           <div className="text-sm text-muted-foreground">
-            {isConnected ? (
+            {checkingConnection ? (
+              <span className="flex items-center">
+                <span className="mr-2 h-2 w-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                Checking...
+              </span>
+            ) : isBackendConnected ? (
               <span className="flex items-center">
                 <span className="mr-2 h-2 w-2 rounded-full bg-green-500"></span>
                 Connected
@@ -52,7 +86,7 @@ const Navbar: React.FC = () => {
             </span>
           </Button>
 
-          <DropdownMenu>
+          {/* <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
@@ -83,7 +117,7 @@ const Navbar: React.FC = () => {
                 Logout
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu> */}
         </div>
       </div>
     </header>
