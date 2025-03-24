@@ -1,6 +1,15 @@
 import base64
 
-def get_backend_user_data(db_host, db_user, db_password, db_name, redis_host):
+
+def get_backend_user_data(
+    db_host,
+    db_user,
+    db_password,
+    db_name,
+    redis_host,
+    docker_username="kaziiriad",
+    version="dev_deploy",
+):
     script = f"""#!/bin/bash
     # Update package lists
     apt-get update
@@ -18,10 +27,49 @@ def get_backend_user_data(db_host, db_user, db_password, db_name, redis_host):
     # Start Docker
     systemctl start docker
     systemctl enable docker
+    
+    # Create docker-compose directory
+    mkdir -p /home/ubuntu/docker-compose
+    
+    # Create docker-compose.yml file for backend
+    cat > /home/ubuntu/docker-compose/docker-compose.yml << 'EOL'
+version: '3'
+services:
+  backend:
+    image: {docker_username}/todo-backend:{version}
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_NAME=${{DB_NAME}}
+      - DB_USER=${{DB_USER}}
+      - DB_PASSWORD=${{DB_PASSWORD}}
+      - DB_HOST=${{DB_HOST}}
+      - REDIS_HOST=${{REDIS_HOST}}
+    restart: always
+EOL
+    
+    # Create .env file with environment variables
+    cat > /home/ubuntu/docker-compose/.env << 'EOL'
+DB_NAME={db_name}
+DB_USER={db_user}
+DB_PASSWORD={db_password}
+DB_HOST={db_host}
+REDIS_HOST={redis_host}
+EOL
+    
+    # Pull the latest backend image
+    docker pull {docker_username}/todo-backend:{version}
+    
+    # Run the container
+    cd /home/ubuntu/docker-compose
+    docker-compose up -d
     """
     return base64.b64encode(script.encode()).decode()
 
-def get_frontend_user_data(backend_url):
+
+def get_frontend_user_data(
+    backend_url, docker_username="kaziiriad", version="dev_deploy"
+):
     script = f"""#!/bin/bash
     # Update package lists
     apt-get update
@@ -35,11 +83,41 @@ def get_frontend_user_data(backend_url):
     # Start Docker
     systemctl start docker
     systemctl enable docker
+    
+    # Create docker-compose directory
+    mkdir -p /home/ubuntu/docker-compose
+    
+    # Create docker-compose.yml file for frontend
+    cat > /home/ubuntu/docker-compose/docker-compose.yml << 'EOL'
+version: '3'
+services:
+  frontend:
+    image: {docker_username}/todo-frontend:{version}
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=${{BACKEND_URL}}
+    restart: always
+EOL
+    
+    # Create .env file with environment variables
+    cat > /home/ubuntu/docker-compose/.env << 'EOL'
+BACKEND_URL={backend_url}
+EOL
+    
+    # Pull the latest frontend image
+    docker pull {docker_username}/todo-frontend:{version}
+    
+    # Run the container
+    cd /home/ubuntu/docker-compose
+    docker-compose up -d
     """
     return base64.b64encode(script.encode()).decode()
 
 
-def get_db_user_data(db_user, db_password, db_name):
+def get_db_user_data(
+    db_user, db_password, db_name, backend_subnet_cidr="10.0.2.0/24"
+):
     script = f"""#!/bin/bash
     # Update system
     apt-get update
@@ -52,7 +130,12 @@ def get_db_user_data(db_user, db_password, db_name):
     
     # Configure PostgreSQL for remote connections
     sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" /etc/postgresql/*/main/postgresql.conf
-    echo "host    all             all             0.0.0.0/0               md5" >> /etc/postgresql/*/main/pg_hba.conf
+    
+    # Remove default remote connection settings if they exist
+    sed -i '/^host.*all.*all.*0.0.0.0\\/0/d' /etc/postgresql/*/main/pg_hba.conf
+    
+    # Add connection rule for backend subnet only
+    echo "host    all             all             {backend_subnet_cidr}               md5" >> /etc/postgresql/*/main/pg_hba.conf
     
     # Restart PostgreSQL to apply changes
     systemctl restart postgresql
@@ -63,6 +146,7 @@ def get_db_user_data(db_user, db_password, db_name):
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_user};"
     """
     return base64.b64encode(script.encode()).decode()
+
 
 def get_redis_user_data():
     script = """#!/bin/bash
@@ -84,4 +168,3 @@ def get_redis_user_data():
     systemctl enable redis-server
     """
     return base64.b64encode(script.encode()).decode()
-

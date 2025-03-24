@@ -23,7 +23,7 @@ push: push-frontend push-backend
 .PHONY: build-frontend
 build-frontend:
 	@echo "Building frontend image..."
-	docker build -t $(FRONTEND_IMAGE):$(VERSION) -f app/todo-frontend/Dockerfile ./app/todo-frontend
+	docker build -t $(FRONTEND_IMAGE):$(VERSION) -f app/frontend/Dockerfile ./app/frontend
 
 .PHONY: push-frontend
 push-frontend:

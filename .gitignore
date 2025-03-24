@@ -162,3 +162,5 @@ cython_debug/
 #.idea/
 *.pem
 .qodo
+.env.development
+.env.production

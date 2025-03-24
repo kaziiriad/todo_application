@@ -1,0 +1,14 @@
+version: '3'
+services:
+  frontend:
+    image: ${ECR_REPO_URL}:latest
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=${BACKEND_URL}
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
