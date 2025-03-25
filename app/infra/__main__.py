@@ -3,6 +3,7 @@
 import pulumi
 import pulumi_aws as aws
 from user_data import get_frontend_user_data, get_backend_user_data, get_db_user_data, get_redis_user_data
+import time
 
 # Configuration
 config = pulumi.Config()
@@ -12,7 +13,7 @@ db_name = config.get('database:name') or 'mydb'
 region = config.get('aws:region') or 'ap-southeast-1'
 docker_username = config.get('docker:username') or 'kaziiriad'  # Your DockerHub username
 docker_image_version = config.get('docker:version') or 'dev_deploy'  # Your image version/tag
-
+KEY_PAIR = 'MyKeyPair' 
 aws_provider = aws.Provider("aws-provider", region=region)
 
 # Create a VPC
@@ -158,6 +159,13 @@ db_sg = aws.ec2.SecurityGroup("db-sg",
         },
         {
             "protocol": "tcp",
+            "from_port": 5432,
+            "to_port": 5432,
+            "cidr_blocks": ["10.0.0.0/16"],  # Allow from entire VPC
+            "description": "Allow PostgreSQL from VPC"
+        },
+        {
+            "protocol": "tcp",
             "from_port": 22,
             "to_port": 22,
             "cidr_blocks": ["0.0.0.0/0"],  # Restrict this in production
@@ -227,8 +235,16 @@ db_instance = aws.ec2.Instance("db-instance",
     instance_type="t2.micro",  # Free tier eligible
     subnet_id=public_subnet.id,  # Use public subnet for direct access
     vpc_security_group_ids=[db_sg.id],
-    user_data=get_db_user_data(db_user, db_password, db_name, private_subnet.cidr_block), # type: ignore
-    tags={"Name": "postgres-db-instance"},
+    key_name=KEY_PAIR,  # Change this to your key pair
+    user_data=pulumi.Output.all(private_subnet.cidr_block).apply(
+        lambda args: get_db_user_data(
+            db_user=db_user,
+            db_password=db_password,
+            db_name=db_name,
+            backend_subnet_cidr=args[0]
+        )
+    ), # type: ignore
+    tags={"Name": "postgres-db-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
         "volume_type": "gp2",
@@ -243,8 +259,9 @@ redis_instance = aws.ec2.Instance("redis-instance",
     instance_type="t2.micro",  # Free tier eligible
     subnet_id=public_subnet.id,  # Use public subnet for direct access
     vpc_security_group_ids=[redis_sg.id],
+    key_name=KEY_PAIR,  # Change this to your key pair
     user_data=get_redis_user_data(),
-    tags={"Name": "redis-instance"},
+    tags={"Name": "redis-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
         "volume_type": "gp2",
@@ -259,7 +276,8 @@ backend_instance = aws.ec2.Instance("backend-instance",
     instance_type="t2.micro",  # Free tier eligible
     subnet_id=public_subnet.id,  # Use public subnet for direct access
     vpc_security_group_ids=[app_sg.id],
-    user_data=pulumi.Output.all(db_instance.public_ip, redis_instance.public_ip).apply(
+    key_name=KEY_PAIR,  # Change this to your key pair
+    user_data=pulumi.Output.all(db_instance.private_ip, redis_instance.private_ip).apply(
         lambda args: get_backend_user_data(
             db_host=args[0],
             db_user=db_user,
@@ -270,7 +288,7 @@ backend_instance = aws.ec2.Instance("backend-instance",
             version=docker_image_version
         )
     ),
-    tags={"Name": "backend-instance"},
+    tags={"Name": "backend-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
         "volume_type": "gp2",
@@ -286,14 +304,15 @@ frontend_instance = aws.ec2.Instance("frontend-instance",
     instance_type="t2.micro",  # Free tier eligible
     subnet_id=public_subnet.id,  # Use public subnet for direct access
     vpc_security_group_ids=[app_sg.id],
-    user_data=pulumi.Output.all(backend_instance.public_ip).apply(
+    key_name=KEY_PAIR,  # Change this to your key pair
+    user_data=pulumi.Output.all(backend_instance.private_ip).apply(
         lambda args: get_frontend_user_data(
-            backend_url=f"http://{args[0]}:8000/tasks",
+            backend_url=f"http://{args[0]}:8000",
             docker_username=docker_username,
             version=docker_image_version
         )
     ),
-    tags={"Name": "frontend-instance"},
+    tags={"Name": "frontend-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
         "volume_type": "gp2",

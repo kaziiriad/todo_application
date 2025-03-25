@@ -2,7 +2,7 @@
     "version": 3,
     "deployment": {
         "manifest": {
-            "time": "2025-03-25T01:08:39.836550807+06:00",
+            "time": "2025-03-25T22:13:34.382062943+06:00",
             "magic": "c3bfd614266a0f4e72f19e067c9a1b193ae90e14be2376d9f2b0d4f25fd81b7a",
             "version": "v3.157.0"
         },
@@ -22,23 +22,23 @@
                 "custom": false,
                 "type": "pulumi:pulumi:Stack",
                 "outputs": {
-                    "backend_instance_id": "i-0f47b3473e0466dc0",
-                    "backend_url": "http://13.212.199.13:8000",
-                    "db_endpoint": "54.169.115.233",
-                    "db_instance_id": "i-0a0a24cd803b12fdb",
-                    "frontend_instance_id": "i-02f488c33c41b13cd",
-                    "frontend_url": "http://47.129.206.212",
-                    "redis_endpoint": "13.212.101.161",
-                    "redis_instance_id": "i-0d9ec879c3dc7fb6e"
+                    "backend_instance_id": "i-0be3e78b79bbeafa4",
+                    "backend_url": "http://13.212.239.182:8000",
+                    "db_endpoint": "13.212.241.0",
+                    "db_instance_id": "i-083aa341687fc5b4f",
+                    "frontend_instance_id": "i-007a03867d92e6a7f",
+                    "frontend_url": "http://47.129.241.232",
+                    "redis_endpoint": "54.179.200.158",
+                    "redis_instance_id": "i-0bb9ea3890d865c96"
                 },
-                "created": "2025-03-23T19:04:55.009722543Z",
-                "modified": "2025-03-23T19:04:55.009722543Z",
+                "created": "2025-03-24T21:12:24.420944227Z",
+                "modified": "2025-03-24T21:12:24.420944227Z",
                 "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi/runtime/stack.py#142"
             },
             {
                 "urn": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0",
                 "custom": true,
-                "id": "696a063e-cf94-473e-9db0-71dbca3e404c",
+                "id": "0d245640-d2c0-4186-a1a5-bf202df52f26",
                 "type": "pulumi:providers:aws",
                 "inputs": {
                     "__internal": {},
@@ -53,13 +53,13 @@
                     "skipRegionValidation": "true",
                     "version": "6.61.0"
                 },
-                "created": "2025-03-23T21:39:32.571467896Z",
-                "modified": "2025-03-24T19:08:31.779636464Z"
+                "created": "2025-03-24T21:12:25.048481068Z",
+                "modified": "2025-03-24T21:12:25.048481068Z"
             },
             {
                 "urn": "urn:pulumi:dev::infra::pulumi:providers:aws::aws-provider",
                 "custom": true,
-                "id": "8eb49821-9b60-4336-990e-73abf18a77f2",
+                "id": "d123ba47-bed8-4637-9f1d-d8a898bc92ab",
                 "type": "pulumi:providers:aws",
                 "inputs": {
                     "__internal": {},
@@ -85,14 +85,14 @@
                     "secretKey",
                     "token"
                 ],
-                "created": "2025-03-24T19:08:33.253397071Z",
-                "modified": "2025-03-24T19:08:33.253397071Z",
+                "created": "2025-03-24T21:12:27.445038786Z",
+                "modified": "2025-03-24T21:12:27.445038786Z",
                 "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/provider.py#767"
             },
             {
                 "urn": "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc",
                 "custom": true,
-                "id": "vpc-0679b768e4e89ec44",
+                "id": "vpc-065431775f43b75b1",
                 "type": "aws:ec2/vpc:Vpc",
                 "inputs": {
                     "__defaults": [],
@@ -108,17 +108,17 @@
                 },
                 "outputs": {
                     "__meta": "{\"schema_version\":\"1\"}",
-                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:vpc/vpc-0679b768e4e89ec44",
+                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:vpc/vpc-065431775f43b75b1",
                     "assignGeneratedIpv6CidrBlock": false,
                     "cidrBlock": "10.0.0.0/16",
-                    "defaultNetworkAclId": "acl-0485d2d27d8d3c56b",
-                    "defaultRouteTableId": "rtb-0e3a68d1b5e990501",
-                    "defaultSecurityGroupId": "sg-01272ed3a4cfaf00e",
-                    "dhcpOptionsId": "dopt-05295cda354507e97",
+                    "defaultNetworkAclId": "acl-072bcd9c26dcc1372",
+                    "defaultRouteTableId": "rtb-0d6f3af3f371397f7",
+                    "defaultSecurityGroupId": "sg-0664964bc5c8f7eb7",
+                    "dhcpOptionsId": "dopt-06ed76d045295ac55",
                     "enableDnsHostnames": true,
                     "enableDnsSupport": true,
                     "enableNetworkAddressUsageMetrics": false,
-                    "id": "vpc-0679b768e4e89ec44",
+                    "id": "vpc-065431775f43b75b1",
                     "instanceTenancy": "default",
                     "ipv4IpamPoolId": null,
                     "ipv4NetmaskLength": null,
@@ -127,7 +127,7 @@
                     "ipv6CidrBlockNetworkBorderGroup": "",
                     "ipv6IpamPoolId": "",
                     "ipv6NetmaskLength": 0,
-                    "mainRouteTableId": "rtb-0e3a68d1b5e990501",
+                    "mainRouteTableId": "rtb-0d6f3af3f371397f7",
                     "ownerId": "203918842107",
                     "tags": {
                         "Name": "minimal-vpc"
@@ -137,21 +137,21 @@
                     }
                 },
                 "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
-                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::aws-provider::8eb49821-9b60-4336-990e-73abf18a77f2",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::aws-provider::d123ba47-bed8-4637-9f1d-d8a898bc92ab",
                 "propertyDependencies": {
                     "cidrBlock": [],
                     "enableDnsHostnames": [],
                     "enableDnsSupport": [],
                     "tags": []
                 },
-                "created": "2025-03-23T21:39:45.683091252Z",
-                "modified": "2025-03-23T21:39:45.683091252Z",
+                "created": "2025-03-24T21:12:40.543725689Z",
+                "modified": "2025-03-24T21:12:40.543725689Z",
                 "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/vpc.py#772"
             },
             {
                 "urn": "urn:pulumi:dev::infra::aws:ec2/internetGateway:InternetGateway::igw",
                 "custom": true,
-                "id": "igw-0878574129f18ff6f",
+                "id": "igw-04ab711575a3ffe85",
                 "type": "aws:ec2/internetGateway:InternetGateway",
                 "inputs": {
                     "__defaults": [],
@@ -161,12 +161,12 @@
                     "tagsAll": {
                         "Name": "minimal-igw"
                     },
-                    "vpcId": "vpc-0679b768e4e89ec44"
+                    "vpcId": "vpc-065431775f43b75b1"
                 },
                 "outputs": {
                     "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"create\":1200000000000,\"delete\":1200000000000,\"update\":1200000000000}}",
-                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:internet-gateway/igw-0878574129f18ff6f",
-                    "id": "igw-0878574129f18ff6f",
+                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:internet-gateway/igw-04ab711575a3ffe85",
+                    "id": "igw-04ab711575a3ffe85",
                     "ownerId": "203918842107",
                     "tags": {
                         "Name": "minimal-igw"
@@ -174,331 +174,22 @@
                     "tagsAll": {
                         "Name": "minimal-igw"
                     },
-                    "vpcId": "vpc-0679b768e4e89ec44"
+                    "vpcId": "vpc-065431775f43b75b1"
                 },
                 "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
                 "dependencies": [
                     "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc"
                 ],
-                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::696a063e-cf94-473e-9db0-71dbca3e404c",
+                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::aws-provider::d123ba47-bed8-4637-9f1d-d8a898bc92ab",
                 "propertyDependencies": {
                     "tags": [],
                     "vpcId": [
                         "urn:pulumi:dev::infra::aws:ec2/vpc:Vpc::minimal-vpc"
                     ]
                 },
-                "created": "2025-03-23T22:04:11.910359507Z",
-                "modified": "2025-03-23T22:04:11.910359507Z",
+                "created": "2025-03-24T21:12:43.320771338Z",
+                "modified": "2025-03-24T21:12:43.320771338Z",
                 "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/internet_gateway.py#278"
-            },
-            {
-                "urn": "urn:pulumi:dev::infra::aws:ec2/eip:Eip::nat-eip",
-                "custom": true,
-                "id": "eipalloc-0c6924ac870facdaf",
-                "type": "aws:ec2/eip:Eip",
-                "inputs": {
-                    "__defaults": [],
-                    "domain": "vpc",
-                    "tags": {
-                        "Name": "nat-eip"
-                    },
-                    "tagsAll": {
-                        "Name": "nat-eip"
-                    }
-                },
-                "outputs": {
-                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"delete\":180000000000,\"read\":900000000000,\"update\":300000000000}}",
-                    "address": null,
-                    "allocationId": "eipalloc-0c6924ac870facdaf",
-                    "arn": "arn:aws:ec2:ap-southeast-1:203918842107:elastic-ip/eipalloc-0c6924ac870facdaf",
-                    "associateWithPrivateIp": null,
-                    "associationId": "",
-                    "carrierIp": "",
-                    "customerOwnedIp": "",
-                    "customerOwnedIpv4Pool": "",
-                    "domain": "vpc",
-                    "id": "eipalloc-0c6924ac870facdaf",
-                    "instance": "",
-                    "ipamPoolId": null,
-                    "networkBorderGroup": "ap-southeast-1",
-                    "networkInterface": "",
-                    "privateDns": null,
-                    "privateIp": "",
-                    "ptrRecord": "",
-                    "publicDns": "ec2-18-139-190-17.ap-southeast-1.compute.amazonaws.com",
-                    "publicIp": "18.139.190.17",
-                    "publicIpv4Pool": "amazon",
-                    "tags": {
-                        "Name": "nat-eip"
-                    },
-                    "tagsAll": {
-                        "Name": "nat-eip"
-                    },
-                    "vpc": true
-                },
-                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
-                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::696a063e-cf94-473e-9db0-71dbca3e404c",
-                "propertyDependencies": {
-                    "domain": [],
-                    "tags": []
-                },
-                "created": "2025-03-23T21:39:34.998560149Z",
-                "modified": "2025-03-23T21:39:34.998560149Z",
-                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ec2/eip.py#851"
-            },
-            {
-                "urn": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0",
-                "custom": true,
-                "delete": true,
-                "id": "637bb2b7-0ef6-439a-8862-064e429660d1",
-                "type": "pulumi:providers:aws",
-                "inputs": {
-                    "__internal": {},
-                    "region": "ap-southeast-1",
-                    "skipCredentialsValidation": "false",
-                    "skipRegionValidation": "true",
-                    "version": "6.61.0"
-                },
-                "outputs": {
-                    "region": "ap-southeast-1",
-                    "skipCredentialsValidation": "false",
-                    "skipRegionValidation": "true",
-                    "version": "6.61.0"
-                },
-                "created": "2025-03-23T19:04:57.660543497Z",
-                "modified": "2025-03-23T19:04:57.660543497Z"
-            },
-            {
-                "urn": "urn:pulumi:dev::infra::aws:iam/role:Role::ec2-role",
-                "custom": true,
-                "id": "ec2-role-cc43ea5",
-                "type": "aws:iam/role:Role",
-                "inputs": {
-                    "__defaults": [
-                        "forceDetachPolicies",
-                        "maxSessionDuration",
-                        "name",
-                        "path"
-                    ],
-                    "assumeRolePolicy": "\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Action\": \"sts:AssumeRole\",\n      \"Principal\": {\n        \"Service\": \"ec2.amazonaws.com\"\n      },\n      \"Effect\": \"Allow\",\n      \"Sid\": \"\"\n    }\n  ]\n}\n",
-                    "forceDetachPolicies": false,
-                    "maxSessionDuration": 3600,
-                    "name": "ec2-role-cc43ea5",
-                    "path": "/"
-                },
-                "outputs": {
-                    "arn": "arn:aws:iam::203918842107:role/ec2-role-cc43ea5",
-                    "assumeRolePolicy": "{\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Sid\":\"\"}],\"Version\":\"2012-10-17\"}",
-                    "createDate": "2025-03-23T19:04:59Z",
-                    "description": "",
-                    "forceDetachPolicies": false,
-                    "id": "ec2-role-cc43ea5",
-                    "inlinePolicies": [],
-                    "managedPolicyArns": [],
-                    "maxSessionDuration": 3600,
-                    "name": "ec2-role-cc43ea5",
-                    "namePrefix": "",
-                    "path": "/",
-                    "permissionsBoundary": "",
-                    "uniqueId": "AROAS66UCTD5UTALDGT64"
-                },
-                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
-                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::637bb2b7-0ef6-439a-8862-064e429660d1",
-                "propertyDependencies": {
-                    "assumeRolePolicy": []
-                },
-                "created": "2025-03-23T19:05:01.529162855Z",
-                "modified": "2025-03-23T19:05:01.529162855Z",
-                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/iam/role.py#875"
-            },
-            {
-                "urn": "urn:pulumi:dev::infra::aws:ecr/repository:Repository::frontend-repo",
-                "custom": true,
-                "id": "frontend-repo-5bbf690",
-                "type": "aws:ecr/repository:Repository",
-                "inputs": {
-                    "__defaults": [
-                        "name"
-                    ],
-                    "imageScanningConfiguration": {
-                        "__defaults": [],
-                        "scanOnPush": true
-                    },
-                    "imageTagMutability": "MUTABLE",
-                    "name": "frontend-repo-5bbf690",
-                    "tags": {
-                        "Name": "frontend-repo"
-                    },
-                    "tagsAll": {
-                        "Name": "frontend-repo"
-                    }
-                },
-                "outputs": {
-                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"delete\":1200000000000}}",
-                    "arn": "arn:aws:ecr:ap-southeast-1:206901878383:repository/frontend-repo-5bbf690",
-                    "encryptionConfigurations": [
-                        {
-                            "encryptionType": "AES256",
-                            "kmsKey": ""
-                        }
-                    ],
-                    "forceDelete": null,
-                    "id": "frontend-repo-5bbf690",
-                    "imageScanningConfiguration": {
-                        "scanOnPush": true
-                    },
-                    "imageTagMutability": "MUTABLE",
-                    "name": "frontend-repo-5bbf690",
-                    "registryId": "206901878383",
-                    "repositoryUrl": "206901878383.dkr.ecr.ap-southeast-1.amazonaws.com/frontend-repo-5bbf690",
-                    "tags": {
-                        "Name": "frontend-repo"
-                    },
-                    "tagsAll": {
-                        "Name": "frontend-repo"
-                    }
-                },
-                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
-                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::637bb2b7-0ef6-439a-8862-064e429660d1",
-                "propertyDependencies": {
-                    "imageScanningConfiguration": [],
-                    "imageTagMutability": [],
-                    "tags": []
-                },
-                "created": "2025-03-23T20:13:28.864393282Z",
-                "modified": "2025-03-23T20:13:28.864393282Z",
-                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ecr/repository.py#389"
-            },
-            {
-                "urn": "urn:pulumi:dev::infra::aws:ecr/repository:Repository::backend-repo",
-                "custom": true,
-                "id": "backend-repo-57cd1cf",
-                "type": "aws:ecr/repository:Repository",
-                "inputs": {
-                    "__defaults": [
-                        "name"
-                    ],
-                    "imageScanningConfiguration": {
-                        "__defaults": [],
-                        "scanOnPush": true
-                    },
-                    "imageTagMutability": "MUTABLE",
-                    "name": "backend-repo-57cd1cf",
-                    "tags": {
-                        "Name": "backend-repo"
-                    },
-                    "tagsAll": {
-                        "Name": "backend-repo"
-                    }
-                },
-                "outputs": {
-                    "__meta": "{\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"delete\":1200000000000}}",
-                    "arn": "arn:aws:ecr:ap-southeast-1:206901878383:repository/backend-repo-57cd1cf",
-                    "encryptionConfigurations": [
-                        {
-                            "encryptionType": "AES256",
-                            "kmsKey": ""
-                        }
-                    ],
-                    "forceDelete": null,
-                    "id": "backend-repo-57cd1cf",
-                    "imageScanningConfiguration": {
-                        "scanOnPush": true
-                    },
-                    "imageTagMutability": "MUTABLE",
-                    "name": "backend-repo-57cd1cf",
-                    "registryId": "206901878383",
-                    "repositoryUrl": "206901878383.dkr.ecr.ap-southeast-1.amazonaws.com/backend-repo-57cd1cf",
-                    "tags": {
-                        "Name": "backend-repo"
-                    },
-                    "tagsAll": {
-                        "Name": "backend-repo"
-                    }
-                },
-                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
-                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::637bb2b7-0ef6-439a-8862-064e429660d1",
-                "propertyDependencies": {
-                    "imageScanningConfiguration": [],
-                    "imageTagMutability": [],
-                    "tags": []
-                },
-                "created": "2025-03-23T20:13:28.918502473Z",
-                "modified": "2025-03-23T20:13:28.918502473Z",
-                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/ecr/repository.py#389"
-            },
-            {
-                "urn": "urn:pulumi:dev::infra::aws:s3/bucket:Bucket::file-assets-bucket",
-                "custom": true,
-                "id": "file-assets-bucket-d3bb468",
-                "type": "aws:s3/bucket:Bucket",
-                "inputs": {
-                    "__defaults": [
-                        "bucket",
-                        "forceDestroy"
-                    ],
-                    "acl": "private",
-                    "bucket": "file-assets-bucket-d3bb468",
-                    "forceDestroy": false,
-                    "tags": {
-                        "Name": "file-assets-bucket"
-                    },
-                    "tagsAll": {
-                        "Name": "file-assets-bucket"
-                    }
-                },
-                "outputs": {
-                    "accelerationStatus": "",
-                    "acl": "private",
-                    "arn": "arn:aws:s3:::file-assets-bucket-d3bb468",
-                    "bucket": "file-assets-bucket-d3bb468",
-                    "bucketDomainName": "file-assets-bucket-d3bb468.s3.amazonaws.com",
-                    "bucketPrefix": null,
-                    "bucketRegionalDomainName": "file-assets-bucket-d3bb468.s3.ap-southeast-1.amazonaws.com",
-                    "corsRules": [],
-                    "forceDestroy": false,
-                    "grants": [],
-                    "hostedZoneId": "Z3O0J2DXBE1FTB",
-                    "id": "file-assets-bucket-d3bb468",
-                    "lifecycleRules": [],
-                    "loggings": [],
-                    "objectLockConfiguration": null,
-                    "policy": null,
-                    "region": "ap-southeast-1",
-                    "replicationConfiguration": null,
-                    "requestPayer": "BucketOwner",
-                    "serverSideEncryptionConfiguration": {
-                        "rule": {
-                            "applyServerSideEncryptionByDefault": {
-                                "kmsMasterKeyId": "",
-                                "sseAlgorithm": "AES256"
-                            },
-                            "bucketKeyEnabled": false
-                        }
-                    },
-                    "tags": {
-                        "Name": "file-assets-bucket"
-                    },
-                    "tagsAll": {
-                        "Name": "file-assets-bucket"
-                    },
-                    "versioning": {
-                        "enabled": false,
-                        "mfaDelete": false
-                    },
-                    "website": null,
-                    "websiteDomain": null,
-                    "websiteEndpoint": null
-                },
-                "parent": "urn:pulumi:dev::infra::pulumi:pulumi:Stack::infra-dev",
-                "provider": "urn:pulumi:dev::infra::pulumi:providers:aws::default_6_61_0::637bb2b7-0ef6-439a-8862-064e429660d1",
-                "propertyDependencies": {
-                    "acl": [],
-                    "tags": []
-                },
-                "created": "2025-03-23T20:13:30.672321329Z",
-                "modified": "2025-03-23T20:13:30.672321329Z",
-                "sourcePosition": "project:///../../.venv/lib/python3.10/site-packages/pulumi_aws/s3/bucket.py#1532"
             }
         ]
     }

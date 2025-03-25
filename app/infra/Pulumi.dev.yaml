@@ -4,5 +4,5 @@ config:
   docker:version: dev_deploy
   database:user: myuser
   database:password:
-    secure: AAABALzfFYljYSxWduSvHNjKdRY5i8O3mD81UJ2cw9IcmTQnio20FYqd
+    secure: AAABACIgvrnQdaeQBPjrwIb2b8Fs8ioLQ1GzEBbxuBj4jSpcLuRrgmiw
   database:name: mydb
