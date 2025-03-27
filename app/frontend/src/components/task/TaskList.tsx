@@ -24,7 +24,7 @@ const TaskList: React.FC<TaskListProps> = ({
   const { updateTask, deleteTask } = useTasks();
 
   const handleToggleComplete = async (task: Task) => {
-    await updateTask(task.id, { is_completed: !task.is_completed });
+    await updateTask(task.id, { completed: !task.completed });
   };
 
   const handleDelete = async (taskId: string, e: React.MouseEvent) => {
@@ -57,13 +57,13 @@ const TaskList: React.FC<TaskListProps> = ({
         >
           <div className="flex items-start gap-3">
             <Checkbox
-              checked={task.is_completed}
+              checked={task.completed}
               onCheckedChange={() => handleToggleComplete(task)}
               onClick={(e) => e.stopPropagation()}
               className="mt-0.5"
             />
             <div>
-              <h3 className={`font-medium ${task.is_completed ? 'line-through text-muted-foreground' : ''}`}>
+              <h3 className={`font-medium ${task.completed ? 'line-through text-muted-foreground' : ''}`}>
                 {task.title}
               </h3>
               
@@ -75,7 +75,7 @@ const TaskList: React.FC<TaskListProps> = ({
               
               <div className="mt-2 flex flex-wrap gap-2">
                 {task.due_date && (
-                  <Badge variant={isOverdue(task.due_date) && !task.is_completed ? "destructive" : "outline"}>
+                  <Badge variant={isOverdue(task.due_date) && !task.completed ? "destructive" : "outline"}>
                     {format(new Date(task.due_date), 'MMM d, yyyy')}
                   </Badge>
                 )}

@@ -1,13 +1,8 @@
 # Build stage
-FROM node:18-alpine as build
-
+FROM node:18-alpine AS build
 WORKDIR /app
-
-# Copy package files and install dependencies
-COPY package.json package-lock.json* ./
-RUN npm ci
-
-# Copy the rest of the application code
+COPY package*.json ./
+RUN npm install
 COPY . .
 
 # Build the application
@@ -16,17 +11,25 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
-# Copy the built files from the build stage
+# Install bash and gettext for envsubst
+RUN apk add --no-cache bash gettext
+
+# Copy the Nginx configuration template
+COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
+
+# Copy the entrypoint script
+COPY docker-entrypoint.sh /
+RUN chmod +x /docker-entrypoint.sh
+
+# Copy your frontend assets
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy nginx configuration template
-COPY nginx.template.conf /etc/nginx/templates/default.conf.template
-
-# Set environment variables that will be used in the nginx template
+# Set default environment variable
 ENV BACKEND_URL=http://backend:8000
+ENV VITE_API_URL=${BACKEND_URL}
 
-# Expose port 80
 EXPOSE 80
 
-# Start Nginx
+# Use the entrypoint script to generate the config and start nginx
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

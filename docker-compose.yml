@@ -1,13 +1,13 @@
-
 services:
-
   frontend:
     build:
       context: ./app/frontend
       dockerfile: Dockerfile
-    
+      args:
+        - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
     environment:
-      - BACKEND_URL=http://backend:8000  # Add this to configure nginx
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - VITE_API_URL=/api
     networks:
       - app-network
     depends_on:
@@ -16,10 +16,7 @@ services:
       - "80:80"
     
   backend:
-    build:
-      context: ./app/backend
-      dockerfile: Dockerfile
-    
+    image: kaziiriad/todo-backend:dev_deploy
     environment:
       - DB_HOST=postgres
       - DB_USER=myuser
@@ -43,24 +40,23 @@ services:
       - "6379:6379"
     networks:
       - app-network
-  
+      
   postgres:
     image: postgres:15-alpine
-    ports:
-      - "5432:5432"
     environment:
       - POSTGRES_USER=myuser
       - POSTGRES_PASSWORD=mypassword
       - POSTGRES_DB=mydb
+    ports:
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Use named volume instead
-    user: postgres  # Add this to fix permission issues
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
+
+volumes:
+  postgres_data:
 
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  postgres_data:  # This is now being used

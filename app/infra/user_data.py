@@ -23,6 +23,7 @@ def get_backend_user_data(
     echo "export DB_PASSWORD={db_password}" | sudo tee -a /etc/environment
     echo "export DB_HOST={db_host}" | sudo tee -a /etc/environment
     echo "export REDIS_HOST={redis_host}" | sudo tee -a /etc/environment
+    echo "export CORS_ALLOW_ORIGINS=*" | sudo tee -a /etc/environment
     
     # Load environment variables
     source /etc/environment
@@ -48,6 +49,7 @@ services:
       - DB_PASSWORD={db_password}
       - DB_HOST={db_host}
       - REDIS_HOST={redis_host}
+      - CORS_ALLOW_ORIGINS=*
     restart: always
 EOL
     
@@ -58,6 +60,7 @@ DB_USER={db_user}
 DB_PASSWORD={db_password}
 DB_HOST={db_host}
 REDIS_HOST={redis_host}
+CORS_ALLOW_ORIGINS=*
 EOL
     
     # Pull the latest backend image
@@ -72,7 +75,7 @@ EOL
     
     # Print environment for debugging
     echo "Environment variables:"
-    env | grep -E 'DB_|REDIS_'
+    env | grep -E 'DB_|REDIS_|CORS_'
     
     # Print docker-compose config for debugging
     echo "Docker Compose configuration:"
@@ -92,15 +95,20 @@ EOL
 def get_frontend_user_data(
     backend_url, docker_username="kaziiriad", version="dev_deploy"
 ):
+    # Ensure backend_url starts with http://
+    if not backend_url.startswith("http://") and not backend_url.startswith("https://"):
+        backend_url = f"http://{backend_url}"
+    
     script = f"""#!/bin/bash
     # Update package lists
     sudo apt-get update
     
     # Install Docker
-    sudo apt-get install -y docker.io docker-compose
+    sudo apt-get install -y docker.io docker-compose curl
     
     # Set environment variables
     echo "export BACKEND_URL={backend_url}" | sudo tee -a /etc/environment
+    echo "export VITE_API_URL={backend_url}" | sudo tee -a /etc/environment
     
     # Load environment variables
     source /etc/environment
@@ -118,16 +126,17 @@ version: '3'
 services:
   frontend:
     image: {docker_username}/todo-frontend:{version}
-    ports:
-      - "80:80"
+    network_mode: "host"
     environment:
       - BACKEND_URL={backend_url}
+      - VITE_API_URL={backend_url}
     restart: always
 EOL
     
     # Create .env file with environment variables
     cat > /home/ubuntu/docker-compose/.env << EOL
 BACKEND_URL={backend_url}
+VITE_API_URL={backend_url}
 EOL
     
     # Pull the latest frontend image
@@ -137,52 +146,66 @@ EOL
     cd /home/ubuntu/docker-compose
     sudo docker-compose up -d
     
+    # Test backend connectivity
+    echo "Testing backend connectivity to {backend_url}..."
+    curl -v {backend_url} || echo "Backend connection failed, but continuing..."
+    
     # Add a timestamp to force update
     echo "Last updated: $(date)" > /home/ubuntu/last_update.txt
     """
     return base64.b64encode(script.encode()).decode()
 
-
-def get_db_user_data(db_user, db_password, db_name, backend_subnet_cidr="10.0.2.0/24"):
-    # Ensure backend_subnet_cidr is a string
-    
-    
+def get_db_user_data(db_user, db_password, db_name, backend_subnet_cidr):
     script = f"""#!/bin/bash
     # Update system
-    apt-get update
-    apt-get upgrade -y
+    sudo apt-get update
+    sudo apt-get upgrade -y
     
     # Install PostgreSQL
-    apt-get install -y postgresql postgresql-contrib
+    sudo apt-get install -y postgresql postgresql-contrib
     
     # Wait for PostgreSQL to initialize
     echo "Waiting for PostgreSQL to initialize..."
     sleep 10
     
     # Make sure PostgreSQL is running
-    systemctl start postgresql
-    systemctl enable postgresql
+    sudo systemctl start postgresql
+    sudo systemctl enable postgresql
     
     # Wait for PostgreSQL to start
     echo "Waiting for PostgreSQL to start..."
     sleep 5
     
-    # Detect PostgreSQL version and set the config path
-    PG_VERSION=$(psql --version | awk '{{print $3}}' | cut -d. -f1)
-    PG_CONF_DIR=$(find /etc/postgresql -name "postgresql.conf" | head -n 1 | xargs dirname)
+    # Find the actual PostgreSQL configuration files
+    echo "Finding PostgreSQL configuration files..."
+    PG_VERSION=$(sudo -u postgres psql -c "SHOW server_version;" | head -3 | tail -1 | cut -d. -f1)
+    echo "PostgreSQL version: $PG_VERSION"
     
-    if [ -z "$PG_CONF_DIR" ]; then
-        echo "Could not find PostgreSQL config directory, using default pattern"
-        PG_CONF_DIR="/etc/postgresql/$PG_VERSION/main"
+    # Find the configuration directory
+    PG_CONF_PATH=$(sudo find /etc/postgresql -name "postgresql.conf" | head -1)
+    PG_HBA_PATH=$(sudo find /etc/postgresql -name "pg_hba.conf" | head -1)
+    
+    if [ -z "$PG_CONF_PATH" ] || [ -z "$PG_HBA_PATH" ]; then
+        echo "ERROR: Could not find PostgreSQL configuration files!"
+        echo "Searching for any postgresql.conf files:"
+        sudo find / -name postgresql.conf 2>/dev/null
+        echo "Searching for any pg_hba.conf files:"
+        sudo find / -name pg_hba.conf 2>/dev/null
+        exit 1
     fi
     
-    echo "Using PostgreSQL config directory: $PG_CONF_DIR"
+    echo "Found postgresql.conf at: $PG_CONF_PATH"
+    echo "Found pg_hba.conf at: $PG_HBA_PATH"
     
-    # Configure PostgreSQL for remote connections - safer approach
-    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" "$PG_CONF_DIR/postgresql.conf"
+    # Configure PostgreSQL for remote connections
+    echo "Configuring PostgreSQL for remote connections..."
+    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" "$PG_CONF_PATH"
     
-    # Create a new pg_hba.conf file instead of modifying the existing one
-    sudo tee "$PG_CONF_DIR/pg_hba.conf" > /dev/null << EOL
+    # Create a backup of the original pg_hba.conf
+    sudo cp "$PG_HBA_PATH" "$PG_HBA_PATH.bak"
+    
+    # Create a new pg_hba.conf file
+    sudo tee "$PG_HBA_PATH" > /dev/null << EOL
 # PostgreSQL Client Authentication Configuration File
 # ===================================================
 #
@@ -195,13 +218,12 @@ host    all             all             127.0.0.1/32            md5
 # IPv6 local connections:
 host    all             all             ::1/128                 md5
 # Allow connections from the backend subnet
-host    all             all             {backend_subnet_cidr}  md5
-# Allow all connections (for testing - remove in production)
-host    all             all             0.0.0.0/0               md5
+host    all             all             {backend_subnet_cidr}   md5
 EOL
     
     # Restart PostgreSQL to apply changes
-    systemctl restart postgresql
+    echo "Restarting PostgreSQL to apply changes..."
+    sudo systemctl restart postgresql
     
     # Wait for PostgreSQL to restart
     echo "Waiting for PostgreSQL to restart..."
@@ -217,6 +239,14 @@ EOL
     echo "Verifying PostgreSQL setup..."
     sudo -u postgres psql -c "\\l"
     
+    # Test remote connectivity
+    echo "Testing configuration..."
+    sudo grep "listen_addresses" "$PG_CONF_PATH"
+    sudo cat "$PG_HBA_PATH"
+    
+    # Check if PostgreSQL is listening on all interfaces
+    sudo netstat -tulpn | grep postgres
+    
     echo "PostgreSQL setup complete!"
     """
     return base64.b64encode(script.encode()).decode()
@@ -224,20 +254,20 @@ EOL
 def get_redis_user_data():
     script = """#!/bin/bash
     # Update system
-    apt-get update
-    apt-get upgrade -y
+    sudo apt-get update
+    sudo apt-get upgrade -y
     
     # Install Redis
-    apt-get install -y redis-server
+    sudo apt-get install -y redis-server
     
     # Configure Redis for remote connections
-    sed -i 's/bind 127.0.0.1/bind 0.0.0.0/g' /etc/redis/redis.conf
+    sudo sed -i 's/bind 127.0.0.1/bind 0.0.0.0/g' /etc/redis/redis.conf
     
     # Disable protected mode for remote connections
-    sed -i 's/protected-mode yes/protected-mode no/g' /etc/redis/redis.conf
+    sudo sed -i 's/protected-mode yes/protected-mode no/g' /etc/redis/redis.conf
     
     # Start Redis service
-    systemctl restart redis-server
-    systemctl enable redis-server
+    sudo systemctl restart redis-server
+    sudo systemctl enable redis-server
     """
     return base64.b64encode(script.encode()).decode()

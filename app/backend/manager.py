@@ -18,7 +18,7 @@ class RedisManager:
     def get(self, key):
         try:
             value = self.redis_client.get(key)
-            return json.loads(value) if value else None
+            return json.loads(value.decode('utf-8')) if value else None # type: ignore
         except Exception as e:
             return None
     
@@ -65,4 +65,16 @@ class RedisManager:
         """Get all members in a room"""
         key = f"room:members:{room_id}"
         return self.get(key) or {}
+    
+    def ping(self):
+        """
+        Check if Redis server is responding.
+        
+        Returns:
+            bool: True if Redis server is responding, False otherwise
+        """
+        try:
+            return self.redis_client.ping()
+        except Exception as e:
+            raise Exception(f"Redis ping failed: {str(e)}")
 

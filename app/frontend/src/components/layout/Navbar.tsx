@@ -19,14 +19,15 @@ const Navbar: React.FC = () => {
   const [checkingConnection, setCheckingConnection] = useState(true);
   
   // API URL from environment variables or default to localhost
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  // const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const BACKEND_URL = import.meta.env.BACKEND_URL || 'http://localhost:8000';
   
   // Check backend connection status
   useEffect(() => {
     const checkBackendConnection = async () => {
       try {
         // Try to connect to the backend health endpoint
-        const response = await axios.get(`${API_URL}/health`, { timeout: 5000 });
+        const response = await axios.get(`/health`, { timeout: 5000 });
         setIsBackendConnected(response.status === 200);
       } catch (error) {
         console.error('Backend connection check failed:', error);
