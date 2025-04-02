@@ -6,10 +6,15 @@ def get_backend_user_data(
     db_user,
     db_password,
     db_name,
-    redis_host,
+    redis_sentinel_hosts,
+    redis_sentinel_port,
+    redis_password,
+    redis_service_name,
     docker_username="kaziiriad",
     version="dev_deploy",
 ):
+    redis_sentinel_hosts_str = ",".join(redis_sentinel_hosts)
+    
     script = f"""#!/bin/bash
     # Update package lists
     sudo apt-get update
@@ -22,7 +27,10 @@ def get_backend_user_data(
     echo "export DB_USER={db_user}" | sudo tee -a /etc/environment
     echo "export DB_PASSWORD={db_password}" | sudo tee -a /etc/environment
     echo "export DB_HOST={db_host}" | sudo tee -a /etc/environment
-    echo "export REDIS_HOST={redis_host}" | sudo tee -a /etc/environment
+    echo "export REDIS_SENTINEL_HOSTS={redis_sentinel_hosts_str}" | sudo tee -a /etc/environment
+    echo "export REDIS_SENTINEL_PORT={redis_sentinel_port}" | sudo tee -a /etc/environment
+    echo "export REDIS_SERVICE_NAME={redis_service_name}" | sudo tee -a /etc/environment
+    echo "export REDIS_PASSWORD={redis_password or ''}" | sudo tee -a /etc/environment
     echo "export CORS_ALLOW_ORIGINS=*" | sudo tee -a /etc/environment
     
     # Load environment variables
@@ -48,7 +56,10 @@ services:
       - DB_USER={db_user}
       - DB_PASSWORD={db_password}
       - DB_HOST={db_host}
-      - REDIS_HOST={redis_host}
+      - REDIS_SENTINEL_HOSTS={redis_sentinel_hosts_str}
+      - REDIS_SENTINEL_PORT={redis_sentinel_port}
+      - REDIS_SERVICE_NAME={redis_service_name}
+      - REDIS_PASSWORD={redis_password or ''}
       - CORS_ALLOW_ORIGINS=*
     restart: always
 EOL
@@ -59,7 +70,10 @@ DB_NAME={db_name}
 DB_USER={db_user}
 DB_PASSWORD={db_password}
 DB_HOST={db_host}
-REDIS_HOST={redis_host}
+REDIS_SENTINEL_HOSTS={redis_sentinel_hosts_str}
+REDIS_SENTINEL_PORT={redis_sentinel_port}
+REDIS_SERVICE_NAME={redis_service_name}
+REDIS_PASSWORD={redis_password or ''}
 CORS_ALLOW_ORIGINS=*
 EOL
     

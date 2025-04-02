@@ -21,8 +21,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import socketio
 
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = os.getenv("REDIS_PORT", 6379)
+REDIS_SENTINEL_HOSTS = os.getenv("REDIS_SENTINEL_HOSTS", "localhost")
+REDIS_SENTINEL_PORT = os.getenv("REDIS_SENTINEL_HOSTS", 26379)
+REDIS_SERVICE_NAME = os.getenv("REDIS_SERVICE_NAME", "mymaster")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 REDIS_DB = os.getenv("REDIS_DB", 0)
 
 app = FastAPI(
@@ -40,7 +42,14 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-redis_manager = RedisManager(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
+redis_manager = RedisManager(
+    sentinel_hosts=REDIS_SENTINEL_HOSTS.split(","),
+    sentinel_port=(REDIS_SENTINEL_PORT if isinstance(REDIS_SENTINEL_PORT, int) else int(REDIS_SENTINEL_PORT)),
+    service_name=REDIS_SERVICE_NAME,
+    password=REDIS_PASSWORD,
+    socket_timeout=0.5,
+    socket_connect_timeout=1.0,
+)
 
 
 # @app.get(

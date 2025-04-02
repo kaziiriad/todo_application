@@ -5,12 +5,13 @@ import pulumi_aws as aws
 from user_data import get_frontend_user_data, get_backend_user_data, get_db_user_data, get_redis_user_data
 import time
 import json
-
+from redis_sentinel_config import get_redis_sentinel_user_data, get_redis_master_user_data, get_redis_replica_user_data
 # Configuration
 config = pulumi.Config()
 db_user = config.get('database:user') or 'myuser'
 db_password = config.get_secret('database:password') or 'mypassword'
 db_name = config.get('database:name') or 'mydb'
+redis_password = config.get_secret('redis:password') or 'myredispassword'
 region = config.get('aws:region') or 'ap-southeast-1'
 docker_username = config.get('docker:username') or 'kaziiriad'  # Your DockerHub username
 docker_image_version = config.get('docker:version') or 'dev_deploy'  # Your image version/tag
@@ -30,7 +31,7 @@ vpc = aws.ec2.Vpc("minimal-vpc",
 )
 
 # Create subnets across multiple AZs
-public_subnet_a = aws.ec2.Subnet("public-subnet-a",
+public_subnet_1 = aws.ec2.Subnet("public-subnet-a",
     vpc_id=vpc.id,
     cidr_block="10.0.1.0/24",
     availability_zone="ap-southeast-1a",
@@ -39,25 +40,25 @@ public_subnet_a = aws.ec2.Subnet("public-subnet-a",
     tags={"Name": "public-subnet-a"}
 )
 
-# public_subnet_b = aws.ec2.Subnet("public-subnet-b",
-#     vpc_id=vpc.id,
-#     cidr_block="10.0.3.0/24",
-#     availability_zone="ap-southeast-1b",
-#     map_public_ip_on_launch=True,
-#     opts=base_opts,
-#     tags={"Name": "public-subnet-b"}
-# )
+public_subnet_2 = aws.ec2.Subnet("public-subnet-b",
+    vpc_id=vpc.id,
+    cidr_block="10.0.3.0/24",
+    availability_zone="ap-southeast-1b",
+    map_public_ip_on_launch=True,
+    opts=base_opts,
+    tags={"Name": "public-subnet-b"}
+)
 
-# public_subnet_c = aws.ec2.Subnet("public-subnet-c",
-#     vpc_id=vpc.id,
-#     cidr_block="10.0.5.0/24",
-#     availability_zone="ap-southeast-1c",
-#     map_public_ip_on_launch=True,
-#     opts=base_opts,
-#     tags={"Name": "public-subnet-c"}
-# )
+public_subnet_3 = aws.ec2.Subnet("public-subnet-c",
+    vpc_id=vpc.id,
+    cidr_block="10.0.5.0/24",
+    availability_zone="ap-southeast-1c",
+    map_public_ip_on_launch=True,
+    opts=base_opts,
+    tags={"Name": "public-subnet-c"}
+)
 
-private_subnet_a = aws.ec2.Subnet("private-subnet-a",
+private_subnet_1 = aws.ec2.Subnet("private-subnet-a",
     vpc_id=vpc.id,
     cidr_block="10.0.2.0/24",
     availability_zone="ap-southeast-1a",
@@ -65,21 +66,21 @@ private_subnet_a = aws.ec2.Subnet("private-subnet-a",
     tags={"Name": "private-subnet-a"}
 )
 
-# private_subnet_b = aws.ec2.Subnet("private-subnet-b",
-#     vpc_id=vpc.id,
-#     cidr_block="10.0.4.0/24",
-#     availability_zone="ap-southeast-1b",
-#     opts=base_opts,
-#     tags={"Name": "private-subnet-b"}
-# )
+private_subnet_2 = aws.ec2.Subnet("private-subnet-b",
+    vpc_id=vpc.id,
+    cidr_block="10.0.4.0/24",
+    availability_zone="ap-southeast-1b",
+    opts=base_opts,
+    tags={"Name": "private-subnet-b"}
+)
 
-# private_subnet_c = aws.ec2.Subnet("private-subnet-c",
-#     vpc_id=vpc.id,
-#     cidr_block="10.0.6.0/24",
-#     availability_zone="ap-southeast-1c",
-#     opts=base_opts,
-#     tags={"Name": "private-subnet-c"}
-# )
+private_subnet_3 = aws.ec2.Subnet("private-subnet-c",
+    vpc_id=vpc.id,
+    cidr_block="10.0.6.0/24",
+    availability_zone="ap-southeast-1c",
+    opts=base_opts,
+    tags={"Name": "private-subnet-c"}
+)
 
 # Create an Internet Gateway
 igw = aws.ec2.InternetGateway("igw",
@@ -105,22 +106,22 @@ public_route = aws.ec2.Route("public-route",
 
 # Associate the public route table with the public subnets
 public_rt_assoc_a = aws.ec2.RouteTableAssociation("public-rt-assoc-a",
-    subnet_id=public_subnet_a.id,
+    subnet_id=public_subnet_1.id,
     route_table_id=public_rt.id,
     opts=base_opts
 )
 
-# public_rt_assoc_b = aws.ec2.RouteTableAssociation("public-rt-assoc-b",
-#     subnet_id=public_subnet_b.id,
-#     route_table_id=public_rt.id,
-#     opts=base_opts
-# )
+public_rt_assoc_b = aws.ec2.RouteTableAssociation("public-rt-assoc-b",
+    subnet_id=public_subnet_2.id,
+    route_table_id=public_rt.id,
+    opts=base_opts
+)
 
-# public_rt_assoc_c = aws.ec2.RouteTableAssociation("public-rt-assoc-c",
-#     subnet_id=public_subnet_c.id,
-#     route_table_id=public_rt.id,
-#     opts=base_opts
-# )
+public_rt_assoc_c = aws.ec2.RouteTableAssociation("public-rt-assoc-c",
+    subnet_id=public_subnet_3.id,
+    route_table_id=public_rt.id,
+    opts=base_opts
+)
 
 # Create an Elastic IP for the NAT Gateway
 nat_eip = aws.ec2.Eip("nat-eip",
@@ -132,7 +133,7 @@ nat_eip = aws.ec2.Eip("nat-eip",
 # Create a NAT Gateway
 nat_gateway = aws.ec2.NatGateway("nat-gateway",
     allocation_id=nat_eip.id,
-    subnet_id=public_subnet_a.id,
+    subnet_id=public_subnet_1.id,
     opts=base_opts,
     tags={"Name": "nat-gateway"}
 )
@@ -152,24 +153,25 @@ private_route = aws.ec2.Route("private-route",
     opts=base_opts
 )
 
+
 # Associate the private route table with the private subnets
 private_rt_assoc_a = aws.ec2.RouteTableAssociation("private-rt-assoc-a",
-    subnet_id=private_subnet_a.id,
+    subnet_id=private_subnet_1.id,
     route_table_id=private_rt.id,
     opts=base_opts
 )
 
-# private_rt_assoc_b = aws.ec2.RouteTableAssociation("private-rt-assoc-b",
-#     subnet_id=private_subnet_b.id,
-#     route_table_id=private_rt.id,
-#     opts=base_opts
-# )
+private_rt_assoc_b = aws.ec2.RouteTableAssociation("private-rt-assoc-b",
+    subnet_id=private_subnet_2.id,
+    route_table_id=private_rt.id,
+    opts=base_opts
+)
 
-# private_rt_assoc_c = aws.ec2.RouteTableAssociation("private-rt-assoc-c",
-#     subnet_id=private_subnet_c.id,
-#     route_table_id=private_rt.id,
-#     opts=base_opts
-# )
+private_rt_assoc_c = aws.ec2.RouteTableAssociation("private-rt-assoc-c",
+    subnet_id=private_subnet_3.id,
+    route_table_id=private_rt.id,
+    opts=base_opts
+)
 
 # Create security groups
 # alb_sg = aws.ec2.SecurityGroup("alb-sg",
@@ -342,6 +344,13 @@ redis_sg = aws.ec2.SecurityGroup("redis-sg",
         },
         {
             "protocol": "tcp",
+            "from_port": 26379,
+            "to_port": 26379,
+            "security_groups": [app_sg.id],
+            "description": "Allow Redis traffic from app"
+        },
+        {
+            "protocol": "tcp",
             "from_port": 22,
             "to_port": 22,
             "security_groups": [bastion_sg.id],  # Allow SSH only from bastion
@@ -360,21 +369,33 @@ redis_sg = aws.ec2.SecurityGroup("redis-sg",
     tags={"Name": "redis-sg"}
 )
 
-# Get the latest Ubuntu 20.04 LTS AMI (free tier eligible)
+# Get the latest Ubuntu 22.04 LTS AMI (free tier eligible)
 ubuntu_ami = aws.ec2.get_ami(
     most_recent=True,
     owners=["099720109477"],  # Canonical's owner ID
     filters=[
-        {"name": "name", "values": ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]},
-        {"name": "virtualization-type", "values": ["hvm"]}
+        {"name": "name", "values": ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]},
+        {"name": "virtualization-type", "values": ["hvm"]},
+        {"name": "state", "values": ["available"]},
+        {"name": "root-device-type", "values": ["ebs"]}
     ]
 )
+public_subnets = [
+    public_subnet_1,
+    public_subnet_2,
+    public_subnet_3
+]
+private_subnets = [
+    private_subnet_1,
+    private_subnet_2,
+    private_subnet_3
+]
 
 # Create a bastion host in the public subnet
 bastion_host = aws.ec2.Instance("bastion-host",
     ami=ubuntu_ami.id,
     instance_type="t2.micro",  # Free tier eligible
-    subnet_id=public_subnet_a.id,  # Place in public subnet
+    subnet_id=public_subnet_1.id,  # Place in public subnet
     vpc_security_group_ids=[bastion_sg.id],
     key_name=KEY_PAIR,
     associate_public_ip_address=True,  # Ensure it gets a public IP
@@ -413,17 +434,17 @@ echo "Bastion host setup complete!"
 )
 
 # Create EC2 instance for PostgreSQL database
-db_instance = aws.ec2.Instance("db-instance",
+db_instances = aws.ec2.Instance("db-instance",
     ami=ubuntu_ami.id,
     opts=pulumi.ResourceOptions(
         provider=aws_provider,
         replace_on_changes=["user_data"]  # Force replacement when these change
     ),
     instance_type="t2.micro",  # Free tier eligible
-    subnet_id=private_subnet_a.id,  # Use private subnet
+    subnet_id=private_subnet_1.id,  # Use private subnet
     vpc_security_group_ids=[db_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(private_subnet_a.cidr_block).apply(
+    user_data=pulumi.Output.all(private_subnet_1.cidr_block).apply(
         lambda args: get_db_user_data(
             db_user=db_user,
             db_password=db_password,
@@ -439,63 +460,118 @@ db_instance = aws.ec2.Instance("db-instance",
     }
 )
 
-# Create EC2 instance for Redis
-redis_instance = aws.ec2.Instance("redis-instance",
+redis_master = aws.ec2.Instance("redis-master",
     ami=ubuntu_ami.id,
     opts=pulumi.ResourceOptions(
         provider=aws_provider,
         replace_on_changes=["user_data"]
     ),
     instance_type="t2.micro",  # Free tier eligible
-    subnet_id=private_subnet_a.id,  # Use private subnet
+    subnet_id=private_subnets[0].id,  # Use private subnet
     vpc_security_group_ids=[redis_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=get_redis_user_data(),
-    tags={"Name": "redis-instance", "UpdatedAt": str(time.time())},
+    user_data=pulumi.Output.all(redis_password).apply(
+        lambda args: get_redis_master_user_data(
+            redis_password=args[0]
+        )
+    ),
+    tags={"Name": "redis-master-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
         "volume_type": "gp2",
         "delete_on_termination": True
     }
 )
-
-backend_instance = aws.ec2.Instance(
-    "backend-instance",
+# Create EC2 instance for Redis
+redis_replicas = [aws.ec2.Instance(f"redis-replica-{i+1}",
     ami=ubuntu_ami.id,
     opts=pulumi.ResourceOptions(
         provider=aws_provider,
         replace_on_changes=["user_data"]
     ),
     instance_type="t2.micro",  # Free tier eligible
-    subnet_id=private_subnet_a.id,  # Use private subnet
+    subnet_id=private_subnets[i+1].id,  # Use private subnet
+    vpc_security_group_ids=[redis_sg.id],
+    key_name=KEY_PAIR,  # Change this to your key pair
+    user_data=pulumi.Output.all(redis_master.private_ip, redis_password).apply(
+        lambda args: get_redis_replica_user_data(
+            master_ip=args[0],
+            redis_password=args[1]
+        )
+    ),
+    tags={"Name": "redis-instance", "UpdatedAt": str(time.time())},
+    root_block_device={
+        "volume_size": 8,  # Minimum size, free tier eligible
+        "volume_type": "gp2",
+        "delete_on_termination": True
+    }
+) for i in range(2)]
+
+redis_sentinels = [aws.ec2.Instance(f"redis-sentinel-{i+1}",
+    ami=ubuntu_ami.id,
+    opts=pulumi.ResourceOptions(
+        provider=aws_provider,
+        replace_on_changes=["user_data"]
+    ),
+    instance_type="t2.micro",  # Free tier eligible
+    subnet_id=private_subnets[i].id,  # Use private subnet
+    vpc_security_group_ids=[redis_sg.id],
+    key_name=KEY_PAIR,  # Change this to your key pair
+    user_data=pulumi.Output.all(redis_master.private_ip, redis_password).apply(
+        lambda args: get_redis_sentinel_user_data(
+            master_ip=args[0],
+            redis_password=args[1]
+        )
+    ),
+    tags={"Name": "redis-sentinel-instance", "UpdatedAt": str(time.time())},
+    root_block_device={
+        "volume_size": 8,  # Minimum size, free tier eligible
+        "volume_type": "gp2",
+        "delete_on_termination": True
+    }
+) for i in range(3)]
+
+
+backend_instances = [aws.ec2.Instance(
+    f"backend-instance-{i+1}",
+    ami=ubuntu_ami.id,
+    opts=pulumi.ResourceOptions(
+        provider=aws_provider,
+        replace_on_changes=["user_data"]
+    ),
+    instance_type="t2.micro",  # Free tier eligible
+    subnet_id=private_subnets[i],  # Use private subnet # type: ignore
     vpc_security_group_ids=[app_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(db_instance.private_ip, redis_instance.private_ip).apply(
+    user_data=pulumi.Output.all(db_instances.private_ip, [rs.private_ip for rs in redis_sentinels], redis_password).apply(
         lambda args: get_backend_user_data(
             db_host=args[0],
             db_user=db_user,
             db_password=db_password,
             db_name=db_name,
-            redis_host=args[1],
+            redis_sentinel_hosts=args[1],
+            redis_sentinel_port=26379,
+            redis_password=args[2],
+            redis_service_name="mymaster",
             docker_username=docker_username,
             version=docker_image_version,
         )    
     ),
     tags={"Name": "backend-instance", "UpdatedAt": str(time.time())},
-)
+) for i in range(len(private_subnets))]
 
-frontend_instance = aws.ec2.Instance(
-    "frontend-instance",
+frontend_instance = [aws.ec2.Instance(
+    f"frontend-instance-{i+1}",
     ami=ubuntu_ami.id,
     opts=pulumi.ResourceOptions(
         provider=aws_provider,
-        replace_on_changes=["user_data", "tags"]
+        replace_on_changes=["user_data"]
     ),
     instance_type="t2.micro",  # Free tier eligible
-    subnet_id=public_subnet_a.id,  
+    subnet_id=public_subnets[i],  # Use public subnet # type: ignore
     vpc_security_group_ids=[app_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(backend_instance.private_dns).apply(
+    user_data=pulumi.Output.all(backend_instances[i].private_dns).apply(
         lambda args: get_frontend_user_data(
             backend_url=f"http://{args[0]}:8000",
             docker_username=docker_username,
@@ -503,14 +579,14 @@ frontend_instance = aws.ec2.Instance(
         )       
     ),
     tags={"Name": "frontend-instance", "UpdatedAt": str(time.time())},
-)
+) for i in range(len(public_subnets))]
 
 # # Create public ALB for frontend traffic
 # alb = aws.lb.LoadBalancer("app-alb",
 #     internal=False,
 #     load_balancer_type="application",
 #     security_groups=[alb_sg.id],
-#     subnets=[public_subnet_a.id, public_subnet_b.id, public_subnet_c.id],  # Use all public subnets
+#     subnets=[public_subnet_1.id, public_subnet_b.id, public_subnet_c.id],  # Use all public subnets
 #     enable_deletion_protection=False,
 #     opts=base_opts,
 #     tags={"Name": "app-alb"}
@@ -521,7 +597,7 @@ frontend_instance = aws.ec2.Instance(
 #     internal=True,  # This makes it an internal ALB
 #     load_balancer_type="application",
 #     security_groups=[internal_api_sg.id],
-#     subnets=[private_subnet_a.id, private_subnet_b.id, private_subnet_c.id],  # Use all private subnets
+#     subnets=[private_subnet_1.id, private_subnet_2.id, private_subnet_3.id],  # Use all private subnets
 #     enable_deletion_protection=False,
 #     opts=base_opts,
 #     tags={"Name": "backend-api-alb"}
@@ -741,7 +817,7 @@ frontend_instance = aws.ec2.Instance(
 #     min_size=2,
 #     max_size=5,
 #     desired_capacity=2,
-#     vpc_zone_identifiers=[private_subnet_a.id, private_subnet_b.id, private_subnet_c.id],
+#     vpc_zone_identifiers=[private_subnet_1.id, private_subnet_2.id, private_subnet_3.id],
 #     target_group_arns=[frontend_tg.arn],
 #     health_check_type="ELB",
 #     health_check_grace_period=300,
@@ -767,7 +843,7 @@ frontend_instance = aws.ec2.Instance(
 #     min_size=2,
 #     max_size=5,
 #     desired_capacity=2,
-#     vpc_zone_identifiers=[private_subnet_a.id, private_subnet_b.id, private_subnet_c.id],
+#     vpc_zone_identifiers=[private_subnet_1.id, private_subnet_2.id, private_subnet_3.id],
 #     target_group_arns=[backend_tg.arn],
 #     health_check_type="ELB",
 #     health_check_grace_period=300,
@@ -886,9 +962,15 @@ frontend_instance = aws.ec2.Instance(
 
 # Export outputs
 pulumi.export("bastion_host_ip", bastion_host.public_ip)
-pulumi.export("frontend_url", frontend_instance.public_ip)
-pulumi.export("backend_ip", backend_instance.private_ip)
-pulumi.export("db_ip", db_instance.private_ip)
-pulumi.export("redis_ip", redis_instance.private_ip)
+pulumi.export("redis_master_ip", redis_master.private_ip)
+pulumi.export("db_instance__ip", db_instances.private_ip)
+for i in range(2):
+    pulumi.export(f"redis_replica_{i+1}_ip", redis_replicas[i].private_ip)
+for i in range(3):
+    
+    pulumi.export(f"redis_sentinel_{i+1}_ip", redis_sentinels[i].private_ip)
+    pulumi.export(f"backend_instance_{i+1}_ip", backend_instances[i].private_ip)
+    pulumi.export(f"frontend_instance_{i+1}_ip", frontend_instance[i].public_ip)
+    pulumi.export(f"frontend_instance_{i+1}_public_dns", frontend_instance[i].public_dns)
 pulumi.export("vpc_id", vpc.id)
 
