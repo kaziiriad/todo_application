@@ -49,8 +49,7 @@ version: '3'
 services:
   backend:
     image: {docker_username}/todo-backend:{version}
-    ports:
-      - "8000:8000"
+    network_mode: "host"
     environment:
       - DB_NAME={db_name}
       - DB_USER={db_user}

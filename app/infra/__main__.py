@@ -3,6 +3,7 @@
 import pulumi
 import pulumi_aws as aws
 from user_data import get_frontend_user_data, get_backend_user_data, get_db_user_data, get_redis_user_data
+from db_scaling_user_data import db_master_user_data, db_replica_user_data
 import time
 import json
 from redis_sentinel_config import get_redis_sentinel_user_data, get_redis_master_user_data, get_redis_replica_user_data
@@ -12,6 +13,7 @@ db_user = config.get('database:user') or 'myuser'
 db_password = config.get_secret('database:password') or 'mypassword'
 db_name = config.get('database:name') or 'mydb'
 redis_password = config.get_secret('redis:password') or 'myredispassword'
+replication_password = config.get_secret('redis:replication_password') or 'myreplicationpassword'
 region = config.get('aws:region') or 'ap-southeast-1'
 docker_username = config.get('docker:username') or 'kaziiriad'  # Your DockerHub username
 docker_image_version = config.get('docker:version') or 'dev_deploy'  # Your image version/tag
@@ -434,7 +436,7 @@ echo "Bastion host setup complete!"
 )
 
 # Create EC2 instance for PostgreSQL database
-db_instances = aws.ec2.Instance("db-instance",
+db_master_instance = aws.ec2.Instance("db-instance",
     ami=ubuntu_ami.id,
     opts=pulumi.ResourceOptions(
         provider=aws_provider,
@@ -444,14 +446,14 @@ db_instances = aws.ec2.Instance("db-instance",
     subnet_id=private_subnet_1.id,  # Use private subnet
     vpc_security_group_ids=[db_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(private_subnet_1.cidr_block).apply(
-        lambda args: get_db_user_data(
-            db_user=db_user,
-            db_password=db_password,
-            db_name=db_name,
-            backend_subnet_cidr=args[0]
-        )
-    ), # type: ignore
+    user_data=pulumi.Output.all(db_user, db_password, db_name, replication_password).apply(
+        lambda args: db_master_user_data(
+            db_user=args[0],
+            db_password=args[1],
+            db_name=args[2],
+            replication_password=args[3],
+        )  
+    ),
     tags={"Name": "postgres-db-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -459,6 +461,30 @@ db_instances = aws.ec2.Instance("db-instance",
         "delete_on_termination": True
     }
 )
+
+db_replica_instances = [aws.ec2.Instance(f"db-replica-instance-{i+1}",
+    ami=ubuntu_ami.id,
+    opts=pulumi.ResourceOptions(
+        provider=aws_provider,
+        replace_on_changes=["user_data"]
+    ),
+    instance_type="t2.micro",  # Free tier eligible
+    subnet_id=private_subnets[i+1].id,  # Use private subnet
+    vpc_security_group_ids=[db_sg.id],
+    key_name=KEY_PAIR,  # Change this to your key pair
+    user_data=pulumi.Output.all(db_master_instance.private_ip, replication_password).apply(
+        lambda args: db_replica_user_data(
+            master_ip=args[0],
+            replication_password=args[1],
+        )
+    ),
+    tags={"Name": "postgres-db-replica-instance", "UpdatedAt": str(time.time())},
+    root_block_device={
+        "volume_size": 8,  # Minimum size, free tier eligible
+        "volume_type": "gp2",
+        "delete_on_termination": True
+    }
+) for i in range(2)]
 
 redis_master = aws.ec2.Instance("redis-master",
     ami=ubuntu_ami.id,
@@ -543,7 +569,7 @@ backend_instances = [aws.ec2.Instance(
     subnet_id=private_subnets[i],  # Use private subnet # type: ignore
     vpc_security_group_ids=[app_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(db_instances.private_ip, [rs.private_ip for rs in redis_sentinels], redis_password).apply(
+    user_data=pulumi.Output.all(db_master_instance.private_ip, [rs.private_ip for rs in redis_sentinels], redis_password).apply(
         lambda args: get_backend_user_data(
             db_host=args[0],
             db_user=db_user,
@@ -963,9 +989,10 @@ frontend_instance = [aws.ec2.Instance(
 # Export outputs
 pulumi.export("bastion_host_ip", bastion_host.public_ip)
 pulumi.export("redis_master_ip", redis_master.private_ip)
-pulumi.export("db_instance__ip", db_instances.private_ip)
+pulumi.export("db_master_instance_ip", db_master_instance.private_ip)
 for i in range(2):
     pulumi.export(f"redis_replica_{i+1}_ip", redis_replicas[i].private_ip)
+    pulumi.export(f"db_replica_{i+1}_ip", db_replica_instances[i].private_ip)
 for i in range(3):
     
     pulumi.export(f"redis_sentinel_{i+1}_ip", redis_sentinels[i].private_ip)
