@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 # from mailer import send_invite_email
 from models import RoomCreate, RoomResponse, TaskCreate, TaskUpdate, TaskResponse, RoomInviteRequest, RoomJoinRequest
-from manager import RedisManager
+from manager import RedisManager, db_manager
 from database import (
     Task,
     get_db,
@@ -22,7 +22,7 @@ import os
 import socketio
 
 REDIS_SENTINEL_HOSTS = os.getenv("REDIS_SENTINEL_HOSTS", "localhost")
-REDIS_SENTINEL_PORT = os.getenv("REDIS_SENTINEL_HOSTS", 26379)
+REDIS_SENTINEL_PORT = os.getenv("REDIS_SENTINEL_PORT", 26379)
 REDIS_SERVICE_NAME = os.getenv("REDIS_SERVICE_NAME", "mymaster")
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 REDIS_DB = os.getenv("REDIS_DB", 0)

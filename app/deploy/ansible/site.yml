@@ -1,0 +1,206 @@
+---
+# Main Ansible playbook for configuring the infrastructure
+
+- name: Configure bastion host
+  hosts: bastion
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - tmux
+          - htop
+          - vim
+          - net-tools
+        state: present
+
+    - name: Set up SSH key for bastion host
+      block:
+        - name: Create SSH key directory
+          file:
+            path: /home/ubuntu/.ssh
+            state: directory
+            mode: '0700'
+            owner: ubuntu
+            group: ubuntu
+
+        - name: Copy the key for SSH to other instances
+          copy:
+            src: /home/ubuntu/.ssh/authorized_keys
+            dest: /home/ubuntu/.ssh/id_rsa
+            remote_src: yes
+            mode: '0600'
+            owner: ubuntu
+            group: ubuntu
+
+        - name: Generate public key from private key
+          shell: ssh-keygen -y -f /home/ubuntu/.ssh/id_rsa > /home/ubuntu/.ssh/id_rsa.pub
+          args:
+            creates: /home/ubuntu/.ssh/id_rsa.pub
+          become_user: ubuntu
+
+        - name: Set permissions on public key
+          file:
+            path: /home/ubuntu/.ssh/id_rsa.pub
+            mode: '0644'
+            owner: ubuntu
+            group: ubuntu
+
+- name: Configure PostgreSQL database servers
+  hosts: database_servers
+  become: yes
+  vars:
+    db_user: myuser
+    db_password: mypassword
+    db_name: mydb
+    replication_password: myreplicationpassword
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install PostgreSQL
+      apt:
+        name:
+          - postgresql
+          - postgresql-contrib
+        state: present
+
+    - name: Identify master and replica nodes
+      set_fact:
+        is_master: "{{ inventory_hostname in groups['db_masters'] }}"
+
+    # Tasks for master node
+    - name: Configure PostgreSQL for master role
+      block:
+        - name: Configure PostgreSQL for remote connections
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?listen_addresses\\s*=.*$"
+            line: "listen_addresses = '*'"
+            state: present
+          notify: Restart PostgreSQL
+
+        - name: Configure pg_hba.conf for remote connections
+          template:
+            src: templates/pg_hba.conf.j2
+            dest: /etc/postgresql/*/main/pg_hba.conf
+          notify: Restart PostgreSQL
+
+        - name: Create database user
+          become_user: postgres
+          postgresql_user:
+            name: "{{ db_user }}"
+            password: "{{ db_password }}"
+            role_attr_flags: CREATEDB,SUPERUSER
+
+        - name: Create database
+          become_user: postgres
+          postgresql_db:
+            name: "{{ db_name }}"
+            owner: "{{ db_user }}"
+      when: is_master
+
+    # Tasks for replica nodes would go here
+    # ...
+
+  handlers:
+    - name: Restart PostgreSQL
+      service:
+        name: postgresql
+        state: restarted
+
+- name: Configure Redis servers
+  hosts: redis_servers
+  become: yes
+  vars:
+    redis_password: myredispassword
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Redis
+      apt:
+        name: redis-server
+        state: present
+
+    - name: Identify Redis role
+      set_fact:
+        is_master: "{{ inventory_hostname in groups['redis_masters'] }}"
+        is_replica: "{{ inventory_hostname in groups['redis_replicas'] }}"
+        is_sentinel: "{{ inventory_hostname in groups['redis_sentinels'] }}"
+
+    # Configuration tasks for different Redis roles would go here
+    # ...
+
+  handlers:
+    - name: Restart Redis
+      service:
+        name: redis-server
+        state: restarted
+
+- name: Configure backend servers
+  hosts: backend_servers
+  become: yes
+  vars:
+    docker_username: kaziiriad
+    docker_image_version: dev_deploy
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Docker and dependencies
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - curl
+        state: present
+
+    - name: Start and enable Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # Additional backend configuration tasks would go here
+    # ...
+
+- name: Configure frontend servers
+  hosts: frontend_servers
+  become: yes
+  vars:
+    docker_username: kaziiriad
+    docker_image_version: dev_deploy
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Docker and dependencies
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - curl
+        state: present
+
+    - name: Start and enable Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # Additional frontend configuration tasks would go here
+    # ...

@@ -2,21 +2,24 @@
 
 import pulumi
 import pulumi_aws as aws
-from user_data import get_frontend_user_data, get_backend_user_data, get_db_user_data, get_redis_user_data
-from db_scaling_user_data import db_master_user_data, db_replica_user_data
+# from user_data import get_frontend_user_data, get_backend_user_data, get_db_user_data, get_redis_user_data
+# from db_scaling_user_data import db_master_user_data, db_replica_user_data
+# from redis_sentinel_config import get_redis_sentinel_user_data, get_redis_master_user_data, get_redis_replica_user_data
+
+from new_user_data import minimal_instance_user_data
+
 import time
 import json
-from redis_sentinel_config import get_redis_sentinel_user_data, get_redis_master_user_data, get_redis_replica_user_data
 # Configuration
 config = pulumi.Config()
-db_user = config.get('database:user') or 'myuser'
-db_password = config.get_secret('database:password') or 'mypassword'
-db_name = config.get('database:name') or 'mydb'
-redis_password = config.get_secret('redis:password') or 'myredispassword'
-replication_password = config.get_secret('redis:replication_password') or 'myreplicationpassword'
+# db_user = config.get('database:user') or 'myuser'
+# db_password = config.get_secret('database:password') or 'mypassword'
+# db_name = config.get('database:name') or 'mydb'
+# redis_password = config.get_secret('redis:password') or 'myredispassword'
+# replication_password = config.get_secret('redis:replication_password') or 'myreplicationpassword'
 region = config.get('aws:region') or 'ap-southeast-1'
-docker_username = config.get('docker:username') or 'kaziiriad'  # Your DockerHub username
-docker_image_version = config.get('docker:version') or 'dev_deploy'  # Your image version/tag
+# docker_username = config.get('docker:username') or 'kaziiriad'  # Your DockerHub username
+# docker_image_version = config.get('docker:version') or 'dev_deploy'  # Your image version/tag
 KEY_PAIR = 'MyKeyPair' 
 aws_provider = aws.Provider("aws-provider", region=region)
 
@@ -436,7 +439,7 @@ echo "Bastion host setup complete!"
 )
 
 # Create EC2 instance for PostgreSQL database
-db_master_instance = aws.ec2.Instance("db-instance",
+db_master_instance = aws.ec2.Instance("db-master-instance",
     ami=ubuntu_ami.id,
     opts=pulumi.ResourceOptions(
         provider=aws_provider,
@@ -446,14 +449,7 @@ db_master_instance = aws.ec2.Instance("db-instance",
     subnet_id=private_subnet_1.id,  # Use private subnet
     vpc_security_group_ids=[db_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(db_user, db_password, db_name, replication_password).apply(
-        lambda args: db_master_user_data(
-            db_user=args[0],
-            db_password=args[1],
-            db_name=args[2],
-            replication_password=args[3],
-        )  
-    ),
+    user_data=minimal_instance_user_data(),
     tags={"Name": "postgres-db-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -472,12 +468,7 @@ db_replica_instances = [aws.ec2.Instance(f"db-replica-instance-{i+1}",
     subnet_id=private_subnets[i+1].id,  # Use private subnet
     vpc_security_group_ids=[db_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(db_master_instance.private_ip, replication_password).apply(
-        lambda args: db_replica_user_data(
-            master_ip=args[0],
-            replication_password=args[1],
-        )
-    ),
+    user_data=minimal_instance_user_data(),
     tags={"Name": "postgres-db-replica-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -496,11 +487,7 @@ redis_master = aws.ec2.Instance("redis-master",
     subnet_id=private_subnets[0].id,  # Use private subnet
     vpc_security_group_ids=[redis_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(redis_password).apply(
-        lambda args: get_redis_master_user_data(
-            redis_password=args[0]
-        )
-    ),
+    user_data=minimal_instance_user_data(),
     tags={"Name": "redis-master-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -519,12 +506,7 @@ redis_replicas = [aws.ec2.Instance(f"redis-replica-{i+1}",
     subnet_id=private_subnets[i+1].id,  # Use private subnet
     vpc_security_group_ids=[redis_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(redis_master.private_ip, redis_password).apply(
-        lambda args: get_redis_replica_user_data(
-            master_ip=args[0],
-            redis_password=args[1]
-        )
-    ),
+    user_data=minimal_instance_user_data(),
     tags={"Name": "redis-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -543,12 +525,7 @@ redis_sentinels = [aws.ec2.Instance(f"redis-sentinel-{i+1}",
     subnet_id=private_subnets[i].id,  # Use private subnet
     vpc_security_group_ids=[redis_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(redis_master.private_ip, redis_password).apply(
-        lambda args: get_redis_sentinel_user_data(
-            master_ip=args[0],
-            redis_password=args[1]
-        )
-    ),
+    user_data=minimal_instance_user_data(),
     tags={"Name": "redis-sentinel-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -569,20 +546,7 @@ backend_instances = [aws.ec2.Instance(
     subnet_id=private_subnets[i],  # Use private subnet # type: ignore
     vpc_security_group_ids=[app_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(db_master_instance.private_ip, [rs.private_ip for rs in redis_sentinels], redis_password).apply(
-        lambda args: get_backend_user_data(
-            db_host=args[0],
-            db_user=db_user,
-            db_password=db_password,
-            db_name=db_name,
-            redis_sentinel_hosts=args[1],
-            redis_sentinel_port=26379,
-            redis_password=args[2],
-            redis_service_name="mymaster",
-            docker_username=docker_username,
-            version=docker_image_version,
-        )    
-    ),
+    user_data=minimal_instance_user_data(),
     tags={"Name": "backend-instance", "UpdatedAt": str(time.time())},
 ) for i in range(len(private_subnets))]
 
@@ -597,13 +561,7 @@ frontend_instance = [aws.ec2.Instance(
     subnet_id=public_subnets[i],  # Use public subnet # type: ignore
     vpc_security_group_ids=[app_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=pulumi.Output.all(backend_instances[i].private_dns).apply(
-        lambda args: get_frontend_user_data(
-            backend_url=f"http://{args[0]}:8000",
-            docker_username=docker_username,
-            version=docker_image_version,
-        )       
-    ),
+    user_data=minimal_instance_user_data(),
     tags={"Name": "frontend-instance", "UpdatedAt": str(time.time())},
 ) for i in range(len(public_subnets))]
 
