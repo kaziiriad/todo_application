@@ -3,7 +3,7 @@
 
 - name: Configure bastion host
   hosts: bastion
-  become: yes
+  become: true
   tasks:
     - name: Update apt cache
       apt:
@@ -17,6 +17,9 @@
           - htop
           - vim
           - net-tools
+          - python3-pip
+          - python3-psycopg2
+          - redis-tools
         state: present
 
     - name: Set up SSH key for bastion host
@@ -53,7 +56,7 @@
 
 - name: Configure PostgreSQL database servers
   hosts: database_servers
-  become: yes
+  become: true
   vars:
     db_user: myuser
     db_password: mypassword
@@ -70,28 +73,59 @@
         name:
           - postgresql
           - postgresql-contrib
+          - python3-psycopg2
         state: present
 
     - name: Identify master and replica nodes
       set_fact:
         is_master: "{{ inventory_hostname in groups['db_masters'] }}"
+        is_replica: "{{ inventory_hostname in groups['db_replicas'] }}"
 
     # Tasks for master node
     - name: Configure PostgreSQL for master role
       block:
         - name: Configure PostgreSQL for remote connections
           lineinfile:
-            path: /etc/postgresql/*/main/postgresql.conf
+            path: /etc/postgresql/14/main/postgresql.conf
             regexp: "^#?listen_addresses\\s*=.*$"
             line: "listen_addresses = '*'"
             state: present
           notify: Restart PostgreSQL
 
-        - name: Configure pg_hba.conf for remote connections
-          template:
-            src: templates/pg_hba.conf.j2
-            dest: /etc/postgresql/*/main/pg_hba.conf
+        - name: Enable WAL for replication
+          lineinfile:
+            path: /etc/postgresql/14/main/postgresql.conf
+            regexp: "^#?wal_level\\s*=.*$"
+            line: "wal_level = replica"
+            state: present
           notify: Restart PostgreSQL
+
+        - name: Set max WAL senders
+          lineinfile:
+            path: /etc/postgresql/14/main/postgresql.conf
+            regexp: "^#?max_wal_senders\\s*=.*$"
+            line: "max_wal_senders = 10"
+            state: present
+          notify: Restart PostgreSQL
+
+        - name: Configure pg_hba.conf for remote connections
+          blockinfile:
+            path: /etc/postgresql/14/main/pg_hba.conf
+            block: |
+              # Allow replication connections from replicas
+              host    replication     postgres        10.0.0.0/16           md5
+              # Allow connections from application servers
+              host    all             {{ db_user }}   10.0.0.0/16           md5
+              # Allow connections from anywhere (consider restricting this in production)
+              host    all             {{ db_user }}   0.0.0.0/0             md5
+          notify: Restart PostgreSQL
+
+        - name: Create replication user
+          become_user: postgres
+          postgresql_user:
+            name: replicator
+            password: "{{ replication_password }}"
+            role_attr_flags: REPLICATION,LOGIN
 
         - name: Create database user
           become_user: postgres
@@ -105,10 +139,69 @@
           postgresql_db:
             name: "{{ db_name }}"
             owner: "{{ db_user }}"
+
+        - name: Initialize database schema
+          become_user: postgres
+          shell: |
+            psql -d {{ db_name }} -c "
+            CREATE TABLE IF NOT EXISTS todos (
+              id SERIAL PRIMARY KEY,
+              title VARCHAR(255) NOT NULL,
+              description TEXT,
+              completed BOOLEAN DEFAULT FALSE,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );"
       when: is_master
 
-    # Tasks for replica nodes would go here
-    # ...
+    # Tasks for replica nodes
+    - name: Configure PostgreSQL for replica role
+      block:
+        - name: Stop PostgreSQL service
+          service:
+            name: postgresql
+            state: stopped
+
+        - name: Clear data directory
+          shell: rm -rf /var/lib/postgresql/14/main/*
+          args:
+            warn: false
+
+        - name: Create base backup from master
+          become_user: postgres
+          shell: |
+            pg_basebackup -h {{ groups['db_masters'][0] }} -D /var/lib/postgresql/14/main -U replicator -P -v -R -X stream -C -S replica_{{ inventory_hostname }}
+          environment:
+            PGPASSWORD: "{{ replication_password }}"
+
+        - name: Configure recovery.conf
+          copy:
+            dest: /var/lib/postgresql/14/main/recovery.signal
+            content: ""
+            owner: postgres
+            group: postgres
+            mode: '0600'
+
+        - name: Configure standby.signal
+          copy:
+            dest: /var/lib/postgresql/14/main/standby.signal
+            content: ""
+            owner: postgres
+            group: postgres
+            mode: '0600'
+
+        - name: Configure replica settings
+          lineinfile:
+            path: /etc/postgresql/14/main/postgresql.conf
+            regexp: "^#?primary_conninfo\\s*=.*$"
+            line: "primary_conninfo = 'host={{ groups['db_masters'][0] }} port=5432 user=replicator password={{ replication_password }}'"
+            state: present
+
+        - name: Start PostgreSQL service
+          service:
+            name: postgresql
+            state: started
+      when: is_replica
 
   handlers:
     - name: Restart PostgreSQL
@@ -118,9 +211,13 @@
 
 - name: Configure Redis servers
   hosts: redis_servers
-  become: yes
+  become: true
   vars:
     redis_password: myredispassword
+    redis_port: 6379
+    sentinel_port: 26379
+    redis_service_name: mymaster
+    quorum: 2
   tasks:
     - name: Update apt cache
       apt:
@@ -138,8 +235,99 @@
         is_replica: "{{ inventory_hostname in groups['redis_replicas'] }}"
         is_sentinel: "{{ inventory_hostname in groups['redis_sentinels'] }}"
 
-    # Configuration tasks for different Redis roles would go here
-    # ...
+    # Configure Redis master
+    - name: Configure Redis master
+      block:
+        - name: Configure Redis master
+          template:
+            src: templates/redis.conf.j2
+            dest: /etc/redis/redis.conf
+            owner: redis
+            group: redis
+            mode: '0640'
+          vars:
+            redis_role: "master"
+            redis_bind: "0.0.0.0"
+            redis_port: "{{ redis_port }}"
+            redis_password: "{{ redis_password }}"
+          notify: Restart Redis
+      when: is_master
+
+    # Configure Redis replicas
+    - name: Configure Redis replicas
+      block:
+        - name: Configure Redis replica
+          template:
+            src: templates/redis.conf.j2
+            dest: /etc/redis/redis.conf
+            owner: redis
+            group: redis
+            mode: '0640'
+          vars:
+            redis_role: "replica"
+            redis_bind: "0.0.0.0"
+            redis_port: "{{ redis_port }}"
+            redis_password: "{{ redis_password }}"
+            redis_master_host: "{{ groups['redis_masters'][0] }}"
+            redis_master_port: "{{ redis_port }}"
+          notify: Restart Redis
+      when: is_replica
+
+    # Configure Redis Sentinel
+    - name: Configure Redis Sentinel
+      block:
+        - name: Create Sentinel config directory
+          file:
+            path: /etc/redis-sentinel
+            state: directory
+            owner: redis
+            group: redis
+            mode: '0750'
+
+        - name: Configure Redis Sentinel
+          template:
+            src: templates/sentinel.conf.j2
+            dest: /etc/redis-sentinel/sentinel.conf
+            owner: redis
+            group: redis
+            mode: '0640'
+          vars:
+            sentinel_bind: "0.0.0.0"
+            sentinel_port: "{{ sentinel_port }}"
+            redis_master_host: "{{ groups['redis_masters'][0] }}"
+            redis_master_port: "{{ redis_port }}"
+            redis_service_name: "{{ redis_service_name }}"
+            quorum: "{{ quorum }}"
+            redis_password: "{{ redis_password }}"
+          notify: Restart Sentinel
+
+        - name: Create Sentinel systemd service
+          copy:
+            dest: /etc/systemd/system/redis-sentinel.service
+            content: |
+              [Unit]
+              Description=Redis Sentinel
+              After=network.target
+
+              [Service]
+              User=redis
+              Group=redis
+              ExecStart=/usr/bin/redis-server /etc/redis-sentinel/sentinel.conf --sentinel
+              Restart=on-failure
+
+              [Install]
+              WantedBy=multi-user.target
+            owner: root
+            group: root
+            mode: '0644'
+
+        - name: Enable and start Sentinel service
+          systemd:
+            name: redis-sentinel
+            state: started
+            enabled: yes
+            daemon_reload: yes
+      when: is_sentinel
 
   handlers:
     - name: Restart Redis
@@ -147,12 +335,25 @@
         name: redis-server
         state: restarted
 
+    - name: Restart Sentinel
+      service:
+        name: redis-sentinel
+        state: restarted
+
 - name: Configure backend servers
   hosts: backend_servers
-  become: yes
+  become: true
   vars:
     docker_username: kaziiriad
     docker_image_version: dev_deploy
+    db_host: "{{ groups['db_masters'][0] }}"
+    db_user: myuser
+    db_password: mypassword
+    db_name: mydb
+    redis_sentinel_hosts: "{{ groups['redis_sentinels'] | join(',') }}"
+    redis_sentinel_port: 26379
+    redis_service_name: mymaster
+    redis_password: myredispassword
   tasks:
     - name: Update apt cache
       apt:
@@ -165,6 +366,12 @@
           - docker.io
           - docker-compose
           - curl
+          - python3-pip
+        state: present
+
+    - name: Install Docker Python module
+      pip:
+        name: docker
         state: present
 
     - name: Start and enable Docker
@@ -173,15 +380,53 @@
         state: started
         enabled: yes
 
-    # Additional backend configuration tasks would go here
-    # ...
+    - name: Create docker-compose directory
+      file:
+        path: /home/ubuntu/docker-compose
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Create docker-compose.yml for backend
+      template:
+        src: templates/backend-docker-compose.yml.j2
+        dest: /home/ubuntu/docker-compose/docker-compose.yml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      vars:
+        docker_username: "{{ docker_username }}"
+        docker_image_version: "{{ docker_image_version }}"
+        db_host: "{{ db_host }}"
+        db_user: "{{ db_user }}"
+        db_password: "{{ db_password }}"
+        db_name: "{{ db_name }}"
+        redis_sentinel_hosts: "{{ redis_sentinel_hosts }}"
+        redis_sentinel_port: "{{ redis_sentinel_port }}"
+        redis_service_name: "{{ redis_service_name }}"
+        redis_password: "{{ redis_password }}"
+
+    - name: Pull backend Docker image
+      docker_image:
+        name: "{{ docker_username }}/todo-backend:{{ docker_image_version }}"
+        source: pull
+        force_source: yes
+
+    - name: Start backend containers
+      docker_compose:
+        project_src: /home/ubuntu/docker-compose
+        state: present
+        pull: yes
+        recreate: always
 
 - name: Configure frontend servers
   hosts: frontend_servers
-  become: yes
+  become: true
   vars:
     docker_username: kaziiriad
     docker_image_version: dev_deploy
+    backend_hosts: "{{ groups['backend_servers'] | map('extract', hostvars, ['ansible_host']) | join(',') }}"
   tasks:
     - name: Update apt cache
       apt:
@@ -194,6 +439,13 @@
           - docker.io
           - docker-compose
           - curl
+          - python3-pip
+          - nginx
+        state: present
+
+    - name: Install Docker Python module
+      pip:
+        name: docker
         state: present
 
     - name: Start and enable Docker
@@ -202,5 +454,50 @@
         state: started
         enabled: yes
 
-    # Additional frontend configuration tasks would go here
-    # ...
+    - name: Create docker-compose directory
+      file:
+        path: /home/ubuntu/docker-compose
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Create docker-compose.yml for frontend
+      template:
+        src: templates/frontend-docker-compose.yml.j2
+        dest: /home/ubuntu/docker-compose/docker-compose.yml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      vars:
+        docker_username: "{{ docker_username }}"
+        docker_image_version: "{{ docker_image_version }}"
+        backend_hosts: "{{ backend_hosts }}"
+
+    - name: Configure Nginx as reverse proxy
+      template:
+        src: templates/nginx.conf.j2
+        dest: /etc/nginx/sites-available/default
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart Nginx
+
+    - name: Pull frontend Docker image
+      docker_image:
+        name: "{{ docker_username }}/todo-frontend:{{ docker_image_version }}"
+        source: pull
+        force_source: yes
+
+    - name: Start frontend containers
+      docker_compose:
+        project_src: /home/ubuntu/docker-compose
+        state: present
+        pull: yes
+        recreate: always
+
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted

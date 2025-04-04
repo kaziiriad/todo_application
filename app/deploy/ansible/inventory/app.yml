@@ -1,0 +1,41 @@
+---
+backend_servers:
+  hosts:
+    backend_servers-1:
+      ansible_host: 10.0.2.89
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+    backend_servers-2:
+      ansible_host: 10.0.4.113
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+    backend_servers-3:
+      ansible_host: 10.0.6.70
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+
+frontend_servers:
+  hosts:
+    frontend_servers-1:
+      ansible_host: 18.143.177.189
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no
+    frontend_servers-2:
+      ansible_host: 13.213.38.95
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no
+    frontend_servers-3:
+      ansible_host: 13.229.144.86
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no
+
+app_servers:
+  children:
+    backend_servers:
+    frontend_servers:

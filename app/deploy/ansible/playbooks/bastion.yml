@@ -1,0 +1,55 @@
+---
+# Playbook for configuring the bastion host
+
+- name: Configure bastion host
+  hosts: bastion
+  become: true
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - tmux
+          - htop
+          - vim
+          - net-tools
+          - python3-pip
+          - python3-psycopg2
+          - redis-tools
+        state: present
+
+    - name: Set up SSH key for bastion host
+      block:
+        - name: Create SSH key directory
+          file:
+            path: /home/ubuntu/.ssh
+            state: directory
+            mode: '0700'
+            owner: ubuntu
+            group: ubuntu
+
+        - name: Copy the key for SSH to other instances
+          copy:
+            src: /home/ubuntu/.ssh/authorized_keys
+            dest: /home/ubuntu/.ssh/id_rsa
+            remote_src: yes
+            mode: '0600'
+            owner: ubuntu
+            group: ubuntu
+
+        - name: Generate public key from private key
+          shell: ssh-keygen -y -f /home/ubuntu/.ssh/id_rsa > /home/ubuntu/.ssh/id_rsa.pub
+          args:
+            creates: /home/ubuntu/.ssh/id_rsa.pub
+          become_user: ubuntu
+
+        - name: Set permissions on public key
+          file:
+            path: /home/ubuntu/.ssh/id_rsa.pub
+            mode: '0644'
+            owner: ubuntu
+            group: ubuntu

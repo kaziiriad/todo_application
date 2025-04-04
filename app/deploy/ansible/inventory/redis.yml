@@ -1,0 +1,45 @@
+---
+redis_masters:
+  hosts:
+    redis_masters-1:
+      ansible_host: 10.0.2.7
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+
+redis_replicas:
+  hosts:
+    redis_replicas-1:
+      ansible_host: 10.0.4.96
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+    redis_replicas-2:
+      ansible_host: 10.0.6.65
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+
+redis_sentinels:
+  hosts:
+    redis_sentinels-1:
+      ansible_host: 10.0.2.83
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+    redis_sentinels-2:
+      ansible_host: 10.0.4.94
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+    redis_sentinels-3:
+      ansible_host: 10.0.6.102
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /home/riadwsl/.ssh/MyKeyPair.pem
+      ansible_ssh_common_args: '-o ProxyCommand="ssh -i /home/riadwsl/.ssh/MyKeyPair.pem -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -W %h:%p ubuntu@13.212.60.22"'
+
+redis_servers:
+  children:
+    redis_masters:
+    redis_replicas:
+    redis_sentinels:

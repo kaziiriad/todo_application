@@ -1,0 +1,84 @@
+---
+# Playbook for configuring frontend servers
+
+- name: Configure frontend servers
+  hosts: frontend_servers
+  become: true
+  vars:
+    docker_username: kaziiriad
+    docker_image_version: dev_deploy
+    backend_hosts: "{{ groups['backend_servers'] | map('extract', hostvars, ['ansible_host']) | join(',') }}"
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Docker and dependencies
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - curl
+          - python3-pip
+          - nginx
+        state: present
+
+    - name: Install Docker Python module
+      pip:
+        name: docker
+        state: present
+
+    - name: Start and enable Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create docker-compose directory
+      file:
+        path: /home/ubuntu/docker-compose
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Create docker-compose.yml for frontend
+      template:
+        src: ../templates/frontend-docker-compose.yml.j2
+        dest: /home/ubuntu/docker-compose/docker-compose.yml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      vars:
+        docker_username: "{{ docker_username }}"
+        docker_image_version: "{{ docker_image_version }}"
+        backend_hosts: "{{ backend_hosts }}"
+
+    - name: Configure Nginx as reverse proxy
+      template:
+        src: ../templates/nginx.conf.j2
+        dest: /etc/nginx/sites-available/default
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart Nginx
+
+    - name: Pull frontend Docker image
+      docker_image:
+        name: "{{ docker_username }}/todo-frontend:{{ docker_image_version }}"
+        source: pull
+        force_source: yes
+
+    - name: Start frontend containers
+      docker_compose:
+        project_src: /home/ubuntu/docker-compose
+        state: present
+        pull: yes
+        recreate: always
+
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted

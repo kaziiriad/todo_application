@@ -1,0 +1,40 @@
+# Redis configuration file
+
+# Network
+bind {{ redis_bind }}
+port {{ redis_port }}
+protected-mode yes
+
+# General
+daemonize yes
+supervised systemd
+pidfile /var/run/redis/redis-server.pid
+loglevel notice
+logfile /var/log/redis/redis-server.log
+
+# Security
+requirepass {{ redis_password }}
+masterauth {{ redis_password }}
+
+# Persistence
+dir /var/lib/redis
+appendonly yes
+appendfilename "appendonly.aof"
+appendfsync everysec
+
+# Performance
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+
+# Replication
+{% if redis_role == "replica" %}
+replicaof {{ redis_master_host }} {{ redis_master_port }}
+replica-read-only yes
+{% endif %}
+
+# Other settings
+tcp-keepalive 300
+databases 16
+save 900 1
+save 300 10
+save 60 10000

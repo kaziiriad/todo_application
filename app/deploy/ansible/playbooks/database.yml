@@ -1,0 +1,409 @@
+---
+# Playbook for configuring PostgreSQL database servers
+
+- name: Configure PostgreSQL database servers
+  hosts: database_servers
+  become: true
+  vars:
+    # Default values for environment variables
+    default_db_user: postgres
+    default_db_password: postgres
+    default_db_name: postgres
+    default_backend_cidr: "10.0.0.0"
+    default_replication_password: replication
+    
+  tasks:
+    # - name: Update apt cache
+    #   apt:
+    #     update_cache: yes
+    #     cache_valid_time: 3600
+
+    # - name: Install PostgreSQL
+    #   apt:
+    #     name:
+    #       - postgresql
+    #       - postgresql-contrib
+    #       - python3-psycopg2
+    #     state: present
+
+    - name: Read environment file
+      slurp:
+        src: /etc/environment
+      register: environment_file_encoded
+      ignore_errors: true
+
+    - name: Set default environment variables
+      set_fact:
+        env_vars: {}
+
+    - name: Decode environment file if it exists
+      set_fact:
+        environment_file_content: "{{ environment_file_encoded['content'] | b64decode }}"
+      when: environment_file_encoded is succeeded
+
+    - name: Extract environment variables if file exists
+      set_fact:
+        env_vars: "{{ env_vars | combine({item.split('=')[0]: item.split('=')[1] | regex_replace('\"', '')}) }}"
+      loop: "{{ environment_file_content.split('\n') | select('match', '^[A-Za-z]') | list }}"
+      when: environment_file_encoded is succeeded
+      
+    - name: Set env variables with defaults
+      set_fact:
+        db_user: "{{ env_vars.DB_USER | default(default_db_user) }}"
+        db_password: "{{ env_vars.DB_PASSWORD | default(default_db_password) }}"
+        db_name: "{{ env_vars.DB_NAME | default(default_db_name) }}"
+        backend_cidr: "{{ env_vars.BACKEND_CIDR | default(default_backend_cidr) }}"
+        replication_password: "{{ env_vars.REPLICATION_PASSWORD | default(default_replication_password) }}"
+
+    - name: Identify master and replica nodes
+      set_fact:
+        is_master: "{{ inventory_hostname in groups['db_masters'] }}"
+        is_replica: "{{ inventory_hostname in groups['db_replicas'] }}"
+        
+    # Get the master IP address
+    - name: Get master IP address
+      set_fact:
+        master_ip: "{{ hostvars[groups['db_masters'][0]]['ansible_host'] }}"
+      when: groups['db_masters'] | length > 0
+
+    - name: Get replica ips
+      set_fact:
+        replica_ip1: "{{ hostvars[groups['db_replicas'][0]]['ansible_host'] }}"
+        replica_ip2: "{{ hostvars[groups['db_replicas'][1]]['ansible_host'] }}"
+      when: groups['db_replicas'] | length > 0
+    # Tasks for master node
+    - name: Configure PostgreSQL for master role
+      when: is_master
+      block:
+        - name: Configure PostgreSQL for remote connections
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?listen_addresses\\s*=.*$"
+            line: "listen_addresses = '*'"
+            state: present
+          notify: Restart PostgreSQL
+
+        - name: Enable WAL for replication
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?wal_level\\s*=.*$"
+            line: "wal_level = replica"
+            state: present
+          notify: Restart PostgreSQL
+
+        - name: Set max WAL senders
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?max_wal_senders\\s*=.*$"
+            line: "max_wal_senders = 10"
+            state: present
+          notify: Restart PostgreSQL
+        
+        - name: Set max replication slots
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?max_replication_slots\\s*=.*$"
+            line: "max_replication_slots = 10"
+            state: present
+          notify: Restart PostgreSQL
+        
+        - name: Wal keep size
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?wal_keep_size\\s*=.*$"
+            line: "wal_keep_size = 1024"
+            state: present
+          notify: Restart PostgreSQL
+
+        - name: Configure pg_hba.conf for remote connections
+          blockinfile:
+            path: /etc/postgresql/*/main/pg_hba.conf
+            block: |
+              host    replication     replicator      {{ replica_ip1 }}/32        md5
+              host    replication     replicator      {{ replica_ip2 }}/32        md5
+              host    all             replicator      {{ replica_ip1 }}/32        md5
+              host    all             replicator      {{ replica_ip2 }}/32        md5
+              host    all             all             {{ backend_cidr }}/16       md5
+          notify: Restart PostgreSQL
+
+        - name: Create replication user
+          shell: |
+            sudo -u postgres psql -c "DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'replicator') THEN
+                CREATE USER replicator WITH LOGIN REPLICATION PASSWORD '{{ replication_password }}';
+              ELSE
+                ALTER USER replicator WITH LOGIN REPLICATION PASSWORD '{{ replication_password }}';
+              END IF;
+            END
+            \$\$;"
+          register: create_replication_user
+          changed_when: create_replication_user.rc == 0
+          notify: Restart PostgreSQL
+          
+        - name: Verify replication user
+          shell: sudo -u postgres psql -c "\du replicator;"
+          register: verify_replication_user
+          changed_when: false
+      #   - name: Create database user
+      #     shell: |
+      #       sudo -u postgres psql -c "CREATE USER {{ db_user }} WITH CREATEDB SUPERUSER PASSWORD '{{ db_password }}';"
+      #     register: create_db_user
+      #     changed_when: create_db_user.rc == 0
+      #     failed_when: create_db_user.rc != 0 and "already exists" not in create_db_user.stderr
+
+      #   - name: Create database
+      #     shell: |
+      #       sudo -u postgres psql -c "CREATE DATABASE {{ db_name }} OWNER {{ db_user }};"
+      #     register: create_db
+      #     changed_when: create_db.rc == 0
+      #     failed_when: create_db.rc != 0 and "already exists" not in create_db.stderr
+
+      #   - name: Initialize database schema
+      #     shell: |
+      #       sudo -u postgres psql -d {{ db_name }} -c "
+      #       CREATE TABLE IF NOT EXISTS todos (
+      #         id SERIAL PRIMARY KEY,
+      #         title VARCHAR(255) NOT NULL,
+      #         description TEXT,
+      #         completed BOOLEAN DEFAULT FALSE,
+      #         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      #         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      #       );"
+      # when: is_master
+
+    # Tasks for replica nodes
+
+    - name: check master connectivity
+      shell: nc -zv {{ master_ip }} 5432
+      when: is_replica
+      register: check_master_connectivity
+      ignore_errors: true
+    
+    - name: Stop PostgreSQL service
+      when: is_replica
+      block:
+        - name: Stop PostgreSQL service
+          service:
+            name: postgresql
+            state: stopped
+
+        - name: Check PostgreSQL service status
+          shell: sudo systemctl status postgresql  # Verify it's stopped
+          args:
+            executable: /bin/bash
+          register: pg_service_status
+          failed_when: "'active (running)' in pg_service_status.stdout"
+          changed_when: false
+          ignore_errors: true
+
+       
+    
+    - name: Clear data directory
+      when: is_replica
+      block:
+        - name: Remove PostgreSQL data directory
+          shell: sudo rm -rf /var/lib/postgresql/*/main
+          args:
+            executable: /bin/bash
+          
+        - name: Create PostgreSQL data directory
+          shell: sudo mkdir -p /var/lib/postgresql/*/main
+          args:
+            executable: /bin/bash
+          
+        - name: Set ownership of PostgreSQL data directory
+          shell: sudo chown postgres:postgres /var/lib/postgresql/*/main
+          args:
+            executable: /bin/bash
+          
+        - name: Set permissions on PostgreSQL data directory
+          shell: sudo chmod 700 /var/lib/postgresql/*/main
+          args:
+            executable: /bin/bash
+
+        # - name: Configure PostgreSQL for replica role
+        #   block:
+        #     - name: Stop PostgreSQL service
+        #       service:
+        #         name: postgresql
+        #         state: stopped
+
+        #     - name: Clear data directory
+        #       shell: rm -rf /var/lib/postgresql/*/main/*
+
+        #       args:
+        #         executable: /bin/bash
+
+        - name: Verify directory is empty and has correct permissions.
+          shell: sudo ls -la /var/lib/postgresql/*/main
+          args:
+            executable: /bin/bash
+          register: dir_check
+          changed_when: false
+
+        - name: Create base backup from master for first replica
+          shell: |
+            sudo -u postgres PGPASSWORD="{{ replication_password }}" pg_basebackup -h {{ master_ip }} -D /var/lib/postgresql/*/main -U replicator -P -v -R -X stream -C -S replica_{{ inventory_hostname | replace('-', '_') }}
+          register: basebackup_result_1
+          failed_when: basebackup_result_1.rc != 0
+          when: inventory_hostname == groups['db_replicas'][0]
+
+        - name: Create base backup from master for second replica
+          shell: |
+            sudo -u postgres PGPASSWORD="{{ replication_password }}" pg_basebackup -h {{ master_ip }} -D /var/lib/postgresql/*/main -U replicator -P -v -R -X stream -C -S replica_{{ inventory_hostname | replace('-', '_') }}
+          register: basebackup_result_2
+          failed_when: basebackup_result_2.rc != 0
+          when: inventory_hostname == groups['db_replicas'][1]
+
+        - name: Configure listen_addresses in postgresql.conf
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?listen_addresses\\s*=.*$"
+            line: "listen_addresses = '*'"
+            state: present
+          notify: Restart PostgreSQL
+
+        - name: Configure port in postgresql.conf
+          lineinfile:
+            path: /etc/postgresql/*/main/postgresql.conf
+            regexp: "^#?port\\s*=.*$"
+            line: "port = 5432"
+            state: present
+          notify: Restart PostgreSQL
+
+        - name: Configure pg_hba.conf for remote connections
+          blockinfile:
+            path: /etc/postgresql/*/main/pg_hba.conf
+            block: |
+              host    all     all      {{ backend_cidr }}/16        md5
+        
+        - name: Start PostgreSQL service
+          service:
+            name: postgresql
+            state: started
+            enabled: yes
+        - name: Check PostgreSQL service status
+          shell: sudo systemctl status postgresql  # Verify it's running
+          args:
+            executable: /bin/bash
+          register: pg_service_status
+          failed_when: "'active (running)' not in pg_service_status.stdout"
+          changed_when: false
+    # Create test database and data on master
+    - name: Create test database and data on master
+      when: is_master
+      block:
+        - name: Wait for PostgreSQL to be ready
+          wait_for:
+            port: 5432
+            state: started
+            timeout: 30
+
+        - name: Create test database and table
+          shell: |
+            sudo -u postgres psql << EOF
+            -- Create test database and table
+            CREATE DATABASE test_db;
+            \c test_db
+            CREATE TABLE replication_test (id serial primary key, data text);
+            INSERT INTO replication_test (data) VALUES ('test data');
+            \q
+            EOF
+          register: create_test_db
+          changed_when: create_test_db.rc == 0
+          failed_when: create_test_db.rc != 0 and "already exists" not in create_test_db.stderr
+
+        - name: Verify test data
+          shell: |
+            sudo -u postgres psql << EOF
+            \c test_db
+            SELECT * FROM replication_test;
+            \q
+            EOF
+          register: verify_test_data
+          changed_when: false
+
+        - name: Display test data on master
+          debug:
+            var: verify_test_data.stdout_lines
+
+    # Check replication status on replicas
+    - name: Check replication status on replicas
+      when: is_replica
+      block:
+        - name: Wait for PostgreSQL to start completely
+          wait_for:
+            port: 5432
+            state: started
+            timeout: 30
+
+        - name: Verify replica mode
+          shell: |
+            sudo -u postgres psql -c "SELECT pg_is_in_recovery();"
+          register: replica_mode
+          failed_when: "'t' not in replica_mode.stdout"
+          changed_when: false
+
+        - name: Check replication lag
+          shell: sudo -u postgres psql -c "SELECT now() - pg_last_xact_replay_timestamp() AS replication_lag;"
+          register: replication_lag
+          changed_when: false
+
+        - name: Display replication lag
+          debug:
+            var: replication_lag.stdout_lines
+            
+        # Verify test data replication
+        - name: Wait for data to replicate (5 seconds)
+          pause:
+            seconds: 5
+          
+        - name: Verify test data on replica
+          shell: |
+            sudo -u postgres psql << EOF
+            \c test_db
+            SELECT * FROM replication_test;
+            \q
+            EOF
+          register: verify_replica_data
+          changed_when: false
+          ignore_errors: true  # Don't fail if the database doesn't exist yet
+
+        - name: Display test data on replica
+          debug:
+            var: verify_replica_data.stdout_lines
+
+    # Check replication status on master
+    - name: Check replication status on master
+      when: is_master
+      block:
+        - name: Wait for PostgreSQL to be ready
+          wait_for:
+            port: 5432
+            state: started
+            timeout: 30
+
+        - name: Check replication connections
+          shell: sudo -u postgres psql -c "SELECT client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn FROM pg_stat_replication;"
+          register: replication_connections
+          changed_when: false
+
+        - name: Display replication connections
+          debug:
+            var: replication_connections.stdout_lines
+
+        - name: Check replication slots
+          shell: sudo -u postgres psql -c "SELECT slot_name, active FROM pg_replication_slots;"
+          register: replication_slots
+          changed_when: false
+
+        - name: Display replication slots
+          debug:
+            var: replication_slots.stdout_lines
+
+  handlers:
+    - name: Restart PostgreSQL
+      service:
+        name: postgresql
+        state: restarted

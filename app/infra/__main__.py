@@ -2,24 +2,23 @@
 
 import pulumi
 import pulumi_aws as aws
-# from user_data import get_frontend_user_data, get_backend_user_data, get_db_user_data, get_redis_user_data
-# from db_scaling_user_data import db_master_user_data, db_replica_user_data
-# from redis_sentinel_config import get_redis_sentinel_user_data, get_redis_master_user_data, get_redis_replica_user_data
-
-from new_user_data import minimal_instance_user_data
+from new_user_data import db_instance_user_data, redis_master_instance_user_data, redis_replica_instance_user_data, redis_sentinel_instance_user_data, backend_instance_user_data, frontend_instance_user_data
+from ssh_config_generator import setup_ssh_config
 
 import time
 import json
+
 # Configuration
 config = pulumi.Config()
-# db_user = config.get('database:user') or 'myuser'
-# db_password = config.get_secret('database:password') or 'mypassword'
-# db_name = config.get('database:name') or 'mydb'
-# redis_password = config.get_secret('redis:password') or 'myredispassword'
-# replication_password = config.get_secret('redis:replication_password') or 'myreplicationpassword'
+docker_username = config.get("docker_username") or 'kaziiriad'
+version = config.get("version") or 'dev_deploy'
+db_user = config.get("db_user") or 'myuser'
+db_password = config.get("db_password") or 'mypassword'
+db_name = config.get("db_name") or 'mydb'
+replication_password = config.get("replication_password") or 'mydbreplication'
+redis_password = config.get("redis_password") or 'myredispassword'
+redis_service_name = config.get("redis_service_name") or "mymaster"
 region = config.get('aws:region') or 'ap-southeast-1'
-# docker_username = config.get('docker:username') or 'kaziiriad'  # Your DockerHub username
-# docker_image_version = config.get('docker:version') or 'dev_deploy'  # Your image version/tag
 KEY_PAIR = 'MyKeyPair' 
 aws_provider = aws.Provider("aws-provider", region=region)
 
@@ -179,58 +178,6 @@ private_rt_assoc_c = aws.ec2.RouteTableAssociation("private-rt-assoc-c",
 )
 
 # Create security groups
-# alb_sg = aws.ec2.SecurityGroup("alb-sg",
-#     vpc_id=vpc.id,
-#     opts=base_opts,
-#     description="Security group for public ALB",
-#     ingress=[
-#         {
-#             "protocol": "tcp",
-#             "from_port": 80,
-#             "to_port": 80,
-#             "cidr_blocks": ["0.0.0.0/0"],
-#             "description": "Allow HTTP"
-#         }
-#     ],
-#     egress=[
-#         {
-#             "protocol": "-1",
-#             "from_port": 0,
-#             "to_port": 0,
-#             "cidr_blocks": ["0.0.0.0/0"],
-#             "description": "Allow all outbound traffic"
-#         }
-#     ],
-#     tags={"Name": "alb-sg"}
-# )
-
-# Create a security group for internal API communication
-# internal_api_sg = aws.ec2.SecurityGroup("internal-api-sg",
-#     vpc_id=vpc.id,
-#     opts=base_opts,
-#     description="Security group for internal API ALB",
-#     ingress=[
-#         {
-#             "protocol": "tcp",
-#             "from_port": 8000,
-#             "to_port": 8000,
-#             "cidr_blocks": ["10.0.0.0/16"],
-#             "description": "Allow API traffic from within VPC"
-#         }
-#     ],
-#     egress=[
-#         {
-#             "protocol": "-1",
-#             "from_port": 0,
-#             "to_port": 0,
-#             "cidr_blocks": ["0.0.0.0/0"],
-#             "description": "Allow all outbound traffic"
-#         }
-#     ],
-#     tags={"Name": "internal-api-sg"}
-# )
-
-# Create a security group for the bastion host
 bastion_sg = aws.ec2.SecurityGroup("bastion-sg",
     vpc_id=vpc.id,
     opts=base_opts,
@@ -307,13 +254,6 @@ db_sg = aws.ec2.SecurityGroup("db-sg",
             "security_groups": [app_sg.id],
             "description": "Allow PostgreSQL from app"
         },
-        # {
-        #     "protocol": "tcp",
-        #     "from_port": 5432,
-        #     "to_port": 5432,
-        #     "cidr_blocks": ["10.0.0.0/16"],  # Allow from entire VPC
-        #     "description": "Allow PostgreSQL from VPC"
-        # },
         {
             "protocol": "tcp",
             "from_port": 22,
@@ -352,7 +292,7 @@ redis_sg = aws.ec2.SecurityGroup("redis-sg",
             "from_port": 26379,
             "to_port": 26379,
             "security_groups": [app_sg.id],
-            "description": "Allow Redis traffic from app"
+            "description": "Allow Redis Sentinel traffic from app"
         },
         {
             "protocol": "tcp",
@@ -449,7 +389,15 @@ db_master_instance = aws.ec2.Instance("db-master-instance",
     subnet_id=private_subnet_1.id,  # Use private subnet
     vpc_security_group_ids=[db_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=minimal_instance_user_data(),
+    user_data=pulumi.Output.all(db_user, db_password, db_name, vpc.cidr_block, replication_password).apply(
+        lambda args: db_instance_user_data(
+            db_user=args[0],
+            db_password=args[1],
+            db_name=args[2],
+            backend_subnet_cidr=args[3],
+            replication_password=args[4]
+        )
+    ),
     tags={"Name": "postgres-db-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -468,7 +416,15 @@ db_replica_instances = [aws.ec2.Instance(f"db-replica-instance-{i+1}",
     subnet_id=private_subnets[i+1].id,  # Use private subnet
     vpc_security_group_ids=[db_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=minimal_instance_user_data(),
+    user_data=pulumi.Output.all(db_user, db_password, db_name, vpc.cidr_block, replication_password).apply(
+        lambda args: db_instance_user_data(
+            db_user=args[0],
+            db_password=args[1],
+            db_name=args[2],
+            backend_subnet_cidr=args[3],
+            replication_password=args[4]
+        )
+    ),
     tags={"Name": "postgres-db-replica-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -487,7 +443,12 @@ redis_master = aws.ec2.Instance("redis-master",
     subnet_id=private_subnets[0].id,  # Use private subnet
     vpc_security_group_ids=[redis_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=minimal_instance_user_data(),
+    user_data=pulumi.Output.all(redis_password, vpc.cidr_block).apply(
+        lambda args: redis_master_instance_user_data(
+            redis_password=args[0],
+            backend_subnet_cidr=args[1]
+        )
+    ),
     tags={"Name": "redis-master-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -506,14 +467,21 @@ redis_replicas = [aws.ec2.Instance(f"redis-replica-{i+1}",
     subnet_id=private_subnets[i+1].id,  # Use private subnet
     vpc_security_group_ids=[redis_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=minimal_instance_user_data(),
-    tags={"Name": "redis-instance", "UpdatedAt": str(time.time())},
+    user_data=pulumi.Output.all(redis_master.private_ip, redis_password, vpc.cidr_block).apply(
+        lambda args: redis_replica_instance_user_data(
+            master_ip=args[0],
+            redis_password=args[1],
+            backend_subnet_cidr=args[2]
+        )
+    ),
+    tags={"Name": "redis-replica-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
         "volume_type": "gp2",
         "delete_on_termination": True
     }
 ) for i in range(2)]
+ 
 
 redis_sentinels = [aws.ec2.Instance(f"redis-sentinel-{i+1}",
     ami=ubuntu_ami.id,
@@ -525,7 +493,13 @@ redis_sentinels = [aws.ec2.Instance(f"redis-sentinel-{i+1}",
     subnet_id=private_subnets[i].id,  # Use private subnet
     vpc_security_group_ids=[redis_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=minimal_instance_user_data(),
+    user_data=pulumi.Output.all(redis_master.private_ip, redis_password, vpc.cidr_block).apply(
+        lambda args: redis_sentinel_instance_user_data(
+            master_ip=args[0],
+            redis_password=args[1],
+            backend_subnet_cidr=args[2]
+        )
+    ),
     tags={"Name": "redis-sentinel-instance", "UpdatedAt": str(time.time())},
     root_block_device={
         "volume_size": 8,  # Minimum size, free tier eligible
@@ -543,14 +517,30 @@ backend_instances = [aws.ec2.Instance(
         replace_on_changes=["user_data"]
     ),
     instance_type="t2.micro",  # Free tier eligible
-    subnet_id=private_subnets[i],  # Use private subnet # type: ignore
+    subnet_id=private_subnets[i].id,  # Use private subnet # type: ignore
     vpc_security_group_ids=[app_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=minimal_instance_user_data(),
+    user_data=pulumi.Output.all(docker_username, version, db_master_instance.private_ip, redis_master.private_ip, [rr.private_ip for rr in redis_replicas], [rs.private_ip for rs in redis_sentinels]).apply(
+        lambda args: backend_instance_user_data(
+            docker_username=args[0],
+            version=args[1],
+            db_user=db_user,
+            db_password=db_password,
+            db_name=db_name,
+            db_host=args[2],
+            redis_master_host_str=args[3],
+            redis_replica_hosts_str=args[4],
+            redis_sentinel_hosts_str=args[5],
+            redis_sentinel_port=26379,
+            redis_service_name=redis_service_name,
+            redis_password=redis_password
+        )
+    ),
     tags={"Name": "backend-instance", "UpdatedAt": str(time.time())},
 ) for i in range(len(private_subnets))]
 
-frontend_instance = [aws.ec2.Instance(
+# Create frontend instances in public subnets with public IPs
+frontend_instances = [aws.ec2.Instance(
     f"frontend-instance-{i+1}",
     ami=ubuntu_ami.id,
     opts=pulumi.ResourceOptions(
@@ -558,391 +548,19 @@ frontend_instance = [aws.ec2.Instance(
         replace_on_changes=["user_data"]
     ),
     instance_type="t2.micro",  # Free tier eligible
-    subnet_id=public_subnets[i],  # Use public subnet # type: ignore
+    subnet_id=private_subnets[i].id,  # Use public subnet for frontend
     vpc_security_group_ids=[app_sg.id],
     key_name=KEY_PAIR,  # Change this to your key pair
-    user_data=minimal_instance_user_data(),
+    associate_public_ip_address=True,  # Ensure it gets a public IP
+    user_data=pulumi.Output.all(docker_username, version, backend_instances[i].private_ip).apply(
+        lambda args: frontend_instance_user_data(
+            docker_username=args[0],
+            version=args[1],
+            backend_url=args[2]
+        )
+    ),
     tags={"Name": "frontend-instance", "UpdatedAt": str(time.time())},
 ) for i in range(len(public_subnets))]
-
-# # Create public ALB for frontend traffic
-# alb = aws.lb.LoadBalancer("app-alb",
-#     internal=False,
-#     load_balancer_type="application",
-#     security_groups=[alb_sg.id],
-#     subnets=[public_subnet_1.id, public_subnet_b.id, public_subnet_c.id],  # Use all public subnets
-#     enable_deletion_protection=False,
-#     opts=base_opts,
-#     tags={"Name": "app-alb"}
-# )
-
-# # Create internal ALB for backend API traffic
-# backend_alb = aws.lb.LoadBalancer("backend-api-alb",
-#     internal=True,  # This makes it an internal ALB
-#     load_balancer_type="application",
-#     security_groups=[internal_api_sg.id],
-#     subnets=[private_subnet_1.id, private_subnet_2.id, private_subnet_3.id],  # Use all private subnets
-#     enable_deletion_protection=False,
-#     opts=base_opts,
-#     tags={"Name": "backend-api-alb"}
-# )
-
-# # Create target groups for the ALBs
-# frontend_tg = aws.lb.TargetGroup("frontend-tg",
-#     port=80,
-#     protocol="HTTP",
-#     vpc_id=vpc.id,
-#     target_type="instance",
-#     health_check={
-#         "enabled": True,
-#         "path": "/",
-#         "port": "traffic-port",
-#         "protocol": "HTTP",
-#         "healthy_threshold": 2,
-#         "unhealthy_threshold": 2,
-#         "timeout": 5,
-#         "interval": 30,
-#         "matcher": "200-399"
-#     },
-#     opts=base_opts,
-#     tags={"Name": "frontend-tg"}
-# )
-
-# backend_tg = aws.lb.TargetGroup("backend-tg",
-#     port=8000,
-#     protocol="HTTP",
-#     vpc_id=vpc.id,
-#     target_type="instance",
-#     health_check={
-#         "enabled": True,
-#         "path": "/health",
-#         "port": "traffic-port",
-#         "protocol": "HTTP",
-#         "healthy_threshold": 2,
-#         "unhealthy_threshold": 2,
-#         "timeout": 5,
-#         "interval": 30,
-#         "matcher": "200-399"
-#     },
-#     opts=base_opts,
-#     tags={"Name": "backend-tg"}
-# )
-
-# Create ALB listeners
-# http_listener = aws.lb.Listener("http-listener",
-#     load_balancer_arn=alb.arn,
-#     port=80,
-#     default_actions=[{
-#         "type": "forward",
-#         "target_group_arn": frontend_tg.arn
-#     }],
-#     opts=base_opts
-# )
-
-# # Create a listener for the internal ALB
-# backend_listener = aws.lb.Listener("backend-api-listener",
-#     load_balancer_arn=backend_alb.arn,
-#     port=8000,
-#     protocol="HTTP",
-#     default_actions=[{
-#         "type": "forward",
-#         "target_group_arn": backend_tg.arn
-#     }],
-#     opts=base_opts
-# )
-
-# Create launch template for frontend instances
-
-
-# # Create IAM role for EC2 instances to publish CloudWatch metrics
-# instance_role = aws.iam.Role("instance-role",
-#     assume_role_policy=json.dumps({
-#         "Version": "2012-10-17",
-#         "Statement": [{
-#             "Action": "sts:AssumeRole",
-#             "Effect": "Allow",
-#             "Principal": {
-#                 "Service": "ec2.amazonaws.com"
-#             }
-#         }]
-#     }),
-#     opts=base_opts
-# )
-
-# # Create IAM policy for CloudWatch metrics
-# cloudwatch_policy = aws.iam.Policy("cloudwatch-policy",
-#     policy=json.dumps({
-#         "Version": "2012-10-17",
-#         "Statement": [
-#             {
-#                 "Effect": "Allow",
-#                 "Action": [
-#                     "cloudwatch:PutMetricData",
-#                     "cloudwatch:GetMetricStatistics",
-#                     "cloudwatch:ListMetrics"
-#                 ],
-#                 "Resource": "*"
-#             },
-#             {
-#                 "Effect": "Allow",
-#                 "Action": [
-#                     "ec2:DescribeTags"
-#                 ],
-#                 "Resource": "*"
-#             }
-#         ]
-#     }),
-#     opts=base_opts
-# )
-
-# # Attach the policy to the role
-# role_policy_attachment = aws.iam.RolePolicyAttachment("cloudwatch-policy-attachment",
-#     role=instance_role.name,
-#     policy_arn=cloudwatch_policy.arn,
-#     opts=base_opts
-# )
-
-# # Create an instance profile for the role
-# instance_profile = aws.iam.InstanceProfile("instance-profile",
-#     role=instance_role.name,
-#     opts=base_opts
-# )
-# frontend_launch_template = aws.ec2.LaunchTemplate("frontend-launch-template",
-#     name_prefix="frontend-",
-#     image_id=ubuntu_ami.id,
-#     instance_type="t2.micro",
-#     key_name=KEY_PAIR,
-#     vpc_security_group_ids=[app_sg.id],
-#     iam_instance_profile={
-#         "name": instance_profile.name
-#     },
-#     user_data=pulumi.Output.all(backend_alb.dns_name).apply(
-#         lambda args: get_frontend_user_data(
-#             backend_url=f"http://{args[0]}:8000",
-#             docker_username=docker_username,
-#             version=docker_image_version
-#         )
-#     ),
-#     block_device_mappings=[{
-#         "deviceName": "/dev/sda1",
-#         "ebs": {
-#             "volumeSize": 8,
-#             "volumeType": "gp2",
-#             "deleteOnTermination": True
-#         }
-#     }],
-#     tag_specifications=[{
-#         "resourceType": "instance",
-#         "tags": {
-#             "Name": "frontend-instance",
-#             "UpdatedAt": str(time.time())
-#         }
-#     }],
-#     opts=pulumi.ResourceOptions(
-#         provider=aws_provider,
-#         depends_on=[backend_alb, instance_profile]
-#     )
-# )
-
-# # Create launch template for backend instances
-# backend_launch_template = aws.ec2.LaunchTemplate("backend-launch-template",
-#     name_prefix="backend-",
-#     image_id=ubuntu_ami.id,
-#     instance_type="t2.micro",
-#     key_name=KEY_PAIR,
-#     vpc_security_group_ids=[app_sg.id],
-#     iam_instance_profile={
-#         "name": instance_profile.name
-#     },
-#     user_data=pulumi.Output.all(db_instance.private_ip, redis_instance.private_ip).apply(
-#         lambda args: get_backend_user_data(
-#             db_host=args[0],
-#             db_user=db_user,
-#             db_password=db_password,
-#             db_name=db_name,
-#             redis_host=args[1],
-#             docker_username=docker_username,
-#             version=docker_image_version
-#         )
-#     ),
-#     block_device_mappings=[{
-#         "deviceName": "/dev/sda1",
-#         "ebs": {
-#             "volumeSize": 8,
-#             "volumeType": "gp2",
-#             "deleteOnTermination": True
-#         }
-#     }],
-#     tag_specifications=[{
-#         "resourceType": "instance",
-#         "tags": {
-#             "Name": "backend-instance",
-#             "UpdatedAt": str(time.time())
-#         }
-#     }],
-#     opts=pulumi.ResourceOptions(
-#         provider=aws_provider,
-#         depends_on=[db_instance, redis_instance, instance_profile]
-#     )
-# )
-# Create a service-linked role for Auto Scaling if it doesn't exist
-# autoscaling_service_role = aws.iam.ServiceLinkedRole("autoscaling-service-role",
-#     aws_service_name="autoscaling.amazonaws.com",
-#     description="Service linked role for Auto Scaling",
-#     opts=pulumi.ResourceOptions(provider=aws_provider, ignore_changes=["aws_service_name"])
-# )
-
-# # Create auto scaling group for frontend instances
-# frontend_asg = aws.autoscaling.Group("frontend-asg",
-#     launch_template={
-#         "id": frontend_launch_template.id,
-#         "version": "$Latest"
-#     },
-#     min_size=2,
-#     max_size=5,
-#     desired_capacity=2,
-#     vpc_zone_identifiers=[private_subnet_1.id, private_subnet_2.id, private_subnet_3.id],
-#     target_group_arns=[frontend_tg.arn],
-#     health_check_type="ELB",
-#     health_check_grace_period=300,
-#     tags=[
-#         {
-#             "key": "Name",
-#             "value": "frontend-asg-instance",
-#             "propagateAtLaunch": True
-#         }
-#     ],
-#     opts=pulumi.ResourceOptions(
-#         provider=aws_provider,
-#         depends_on=[frontend_launch_template, frontend_tg]
-#     )
-# )
-
-# # Create auto scaling group for backend instances
-# backend_asg = aws.autoscaling.Group("backend-asg",
-#     launch_template={
-#         "id": backend_launch_template.id,
-#         "version": "$Latest"
-#     },
-#     min_size=2,
-#     max_size=5,
-#     desired_capacity=2,
-#     vpc_zone_identifiers=[private_subnet_1.id, private_subnet_2.id, private_subnet_3.id],
-#     target_group_arns=[backend_tg.arn],
-#     health_check_type="ELB",
-#     health_check_grace_period=300,
-#     tags=[
-#         {
-#             "key": "Name",
-#             "value": "backend-asg-instance",
-#             "propagateAtLaunch": True
-#         }
-#     ],
-#     opts=pulumi.ResourceOptions(
-#         provider=aws_provider,
-#         depends_on=[backend_launch_template, backend_tg]
-#     )
-# )
-
-# # Create scaling policies for frontend ASG
-# frontend_scale_up_policy = aws.autoscaling.Policy("frontend-scale-up-policy",
-#     scaling_adjustment=1,
-#     adjustment_type="ChangeInCapacity",
-#     cooldown=300,
-#     autoscaling_group_name=frontend_asg.name,
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
-
-# frontend_scale_down_policy = aws.autoscaling.Policy("frontend-scale-down-policy",
-#     scaling_adjustment=-1,
-#     adjustment_type="ChangeInCapacity",
-#     cooldown=300,
-#     autoscaling_group_name=frontend_asg.name,
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
-
-# # Create scaling policies for backend ASG
-# backend_scale_up_policy = aws.autoscaling.Policy("backend-scale-up-policy",
-#     scaling_adjustment=1,
-#     adjustment_type="ChangeInCapacity",
-#     cooldown=300,
-#     autoscaling_group_name=backend_asg.name,
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
-
-# backend_scale_down_policy = aws.autoscaling.Policy("backend-scale-down-policy",
-#     scaling_adjustment=-1,
-#     adjustment_type="ChangeInCapacity",
-#     cooldown=300,
-#     autoscaling_group_name=backend_asg.name,
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
-
-# Create CloudWatch alarms for frontend scaling
-# frontend_high_cpu_alarm = aws.cloudwatch.MetricAlarm("frontend-high-cpu-alarm",
-#     comparison_operator="GreaterThanThreshold",
-#     evaluation_periods=2,
-#     metric_name="CPUUtilization",
-#     namespace="AWS/EC2",
-#     period=300,
-#     statistic="Average",
-#     threshold=70.0,
-#     alarm_description="Scale up when CPU exceeds 70%",
-#     alarm_actions=[frontend_scale_up_policy.arn],
-#     dimensions={
-#         "AutoScalingGroupName": frontend_asg.name
-#     },
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
-
-# frontend_low_cpu_alarm = aws.cloudwatch.MetricAlarm("frontend-low-cpu-alarm",
-#     comparison_operator="LessThanThreshold",
-#     evaluation_periods=2,
-#     metric_name="CPUUtilization",
-#     namespace="AWS/EC2",
-#     period=300,
-#     statistic="Average",
-#     threshold=30.0,
-#     alarm_description="Scale down when CPU is below 30%",
-#     alarm_actions=[frontend_scale_down_policy.arn],
-#     dimensions={
-#         "AutoScalingGroupName": frontend_asg.name
-#     },
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
-
-# # Create CloudWatch alarms for backend scaling
-# backend_high_cpu_alarm = aws.cloudwatch.MetricAlarm("backend-high-cpu-alarm",
-#     comparison_operator="GreaterThanThreshold",
-#     evaluation_periods=2,
-#     metric_name="CPUUtilization",
-#     namespace="AWS/EC2",
-#     period=300,
-#     statistic="Average",
-#     threshold=70.0,
-#     alarm_description="Scale up when CPU exceeds 70%",
-#     alarm_actions=[backend_scale_up_policy.arn],
-#     dimensions={
-#         "AutoScalingGroupName": backend_asg.name
-#     },
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
-
-# backend_low_cpu_alarm = aws.cloudwatch.MetricAlarm("backend-low-cpu-alarm",
-#     comparison_operator="LessThanThreshold",
-#     evaluation_periods=2,
-#     metric_name="CPUUtilization",
-#     namespace="AWS/EC2",
-#     period=300,
-#     statistic="Average",
-#     threshold=30.0,
-#     alarm_description="Scale down when CPU is below 30%",
-#     alarm_actions=[backend_scale_down_policy.arn],
-#     dimensions={
-#         "AutoScalingGroupName": backend_asg.name
-#     },
-#     opts=pulumi.ResourceOptions(provider=aws_provider)
-# )
 
 # Export outputs
 pulumi.export("bastion_host_ip", bastion_host.public_ip)
@@ -952,10 +570,20 @@ for i in range(2):
     pulumi.export(f"redis_replica_{i+1}_ip", redis_replicas[i].private_ip)
     pulumi.export(f"db_replica_{i+1}_ip", db_replica_instances[i].private_ip)
 for i in range(3):
-    
     pulumi.export(f"redis_sentinel_{i+1}_ip", redis_sentinels[i].private_ip)
     pulumi.export(f"backend_instance_{i+1}_ip", backend_instances[i].private_ip)
-    pulumi.export(f"frontend_instance_{i+1}_ip", frontend_instance[i].public_ip)
-    pulumi.export(f"frontend_instance_{i+1}_public_dns", frontend_instance[i].public_dns)
+    pulumi.export(f"frontend_instance_{i+1}_ip", frontend_instances[i].private_ip)
+    pulumi.export(f"frontend_instance_{i+1}_public_dns", frontend_instances[i].public_dns)
 pulumi.export("vpc_id", vpc.id)
 
+# Generate SSH config file
+setup_ssh_config(
+    bastion_host=bastion_host,
+    db_master=db_master_instance,
+    db_replicas=db_replica_instances,
+    redis_master=redis_master,
+    redis_replicas=redis_replicas,
+    redis_sentinels=redis_sentinels,
+    backend_instances=backend_instances,
+    frontend_instances=frontend_instances
+)

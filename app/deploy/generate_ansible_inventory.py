@@ -37,7 +37,7 @@ def generate_inventory(outputs):
             inventory["bastion"].append({
                 "host": value,
                 "ansible_user": "ubuntu",
-                "ansible_ssh_private_key_file": "~/.ssh/id_rsa"  # Adjust path as needed
+                "ansible_ssh_private_key_file": "/mnt/e/poridhi_exam/app/infra/MyKeyPair.pem"  # Adjust path as needed
             })
         elif key.startswith("db_master"):
             inventory["db_masters"].append({
@@ -92,30 +92,51 @@ def generate_inventory(outputs):
 def write_inventory_file(inventory, filename="inventory.yml"):
     """Write the inventory to a YAML file for Ansible"""
     # Create absolute path for the inventory file
-    inventory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ansible")
+    inventory_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "deploy", "ansible")
     os.makedirs(inventory_dir, exist_ok=True)  # Create directory if it doesn't exist
     inventory_path = os.path.join(inventory_dir, filename)
     
     with open(inventory_path, "w") as f:
         f.write("---\n")
         for group, hosts in inventory.items():
+            # Skip empty groups
+            if not hosts:
+                continue
+                
             f.write(f"{group}:\n")
             f.write("  hosts:\n")
+            
             for i, host_data in enumerate(hosts):
-                host = host_data.pop("host")
+                # Skip if host_data doesn't have 'host' key
+                if 'host' not in host_data:
+                    print(f"Warning: Host in group '{group}' is missing 'host' key. Skipping.")
+                    continue
+                    
+                # Make a copy of host_data to avoid modifying the original
+                host_data_copy = host_data.copy()
+                host = host_data_copy.pop("host")
+                
                 f.write(f"    {group}-{i+1}:\n")
                 f.write(f"      ansible_host: {host}\n")
-                for key, value in host_data.items():
+                
+                for key, value in host_data_copy.items():
                     f.write(f"      {key}: {value}\n")
+            
             f.write("\n")
     
     print(f"Inventory file created: {inventory_path}")
 
     
 def main():
-    outputs = get_pulumi_outputs()
-    inventory = generate_inventory(outputs)
-    write_inventory_file(inventory)
+    try:
+        outputs = get_pulumi_outputs()
+        inventory = generate_inventory(outputs)
+        write_inventory_file(inventory)
+        print("Inventory generation completed successfully.")
+    except Exception as e:
+        print(f"Error generating inventory: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()

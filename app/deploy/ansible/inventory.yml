@@ -1,0 +1,158 @@
+---
+backend_servers:
+  hosts:
+    backend_servers-1:
+      ansible_host: 10.0.2.89
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    backend_servers-2:
+      ansible_host: 10.0.4.113
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    backend_servers-3:
+      ansible_host: 10.0.6.70
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+bastion:
+  hosts:
+    bastion-1:
+      ansible_host: 47.128.246.148
+      ansible_user: ubuntu
+      ansible_ssh_private_key_file: /mnt/e/poridhi_exam/app/infra/MyKeyPair.pem
+
+db_masters:
+  hosts:
+    db_masters-1:
+      ansible_host: 10.0.2.177
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+db_replicas:
+  hosts:
+    db_replicas-1:
+      ansible_host: 10.0.4.185
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    db_replicas-2:
+      ansible_host: 10.0.6.222
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+frontend_servers:
+  hosts:
+    frontend_servers-1:
+      ansible_host: 18.143.177.189
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    frontend_servers-2:
+      ansible_host: 13.213.38.95
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    frontend_servers-3:
+      ansible_host: 13.229.144.86
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+redis_masters:
+  hosts:
+    redis_masters-1:
+      ansible_host: 10.0.2.7
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+redis_replicas:
+  hosts:
+    redis_replicas-1:
+      ansible_host: 10.0.4.96
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_replicas-2:
+      ansible_host: 10.0.6.65
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+redis_sentinels:
+  hosts:
+    redis_sentinels-1:
+      ansible_host: 10.0.2.83
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_sentinels-2:
+      ansible_host: 10.0.4.94
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_sentinels-3:
+      ansible_host: 10.0.6.102
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+database_servers:
+  hosts:
+    database_servers-1:
+      ansible_host: 10.0.2.177
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    database_servers-2:
+      ansible_host: 10.0.4.185
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    database_servers-3:
+      ansible_host: 10.0.6.222
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+redis_servers:
+  hosts:
+    redis_servers-1:
+      ansible_host: 10.0.2.7
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_servers-2:
+      ansible_host: 10.0.4.96
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_servers-3:
+      ansible_host: 10.0.6.65
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_servers-4:
+      ansible_host: 10.0.2.83
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_servers-5:
+      ansible_host: 10.0.4.94
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    redis_servers-6:
+      ansible_host: 10.0.6.102
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+
+app_servers:
+  hosts:
+    app_servers-1:
+      ansible_host: 10.0.2.89
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    app_servers-2:
+      ansible_host: 10.0.4.113
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    app_servers-3:
+      ansible_host: 10.0.6.70
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    app_servers-4:
+      ansible_host: 18.143.177.189
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    app_servers-5:
+      ansible_host: 13.213.38.95
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+    app_servers-6:
+      ansible_host: 13.229.144.86
+      ansible_user: ubuntu
+      ansible_ssh_common_args: -o ProxyCommand="ssh -W %h:%p -q ubuntu@47.128.246.148"
+

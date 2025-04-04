@@ -1,0 +1,133 @@
+---
+# Playbook for configuring Redis servers
+
+- name: Configure Redis servers
+  hosts: redis_servers
+  become: true
+  vars:
+    redis_password: myredispassword
+    redis_port: 6379
+    sentinel_port: 26379
+    redis_service_name: mymaster
+    quorum: 2
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Redis
+      apt:
+        name: redis-server
+        state: present
+
+    - name: Identify Redis role
+      set_fact:
+        is_master: "{{ inventory_hostname in groups['redis_masters'] }}"
+        is_replica: "{{ inventory_hostname in groups['redis_replicas'] }}"
+        is_sentinel: "{{ inventory_hostname in groups['redis_sentinels'] }}"
+
+    # Configure Redis master
+    - name: Configure Redis master
+      block:
+        - name: Configure Redis master
+          template:
+            src: ../templates/redis.conf.j2
+            dest: /etc/redis/redis.conf
+            owner: redis
+            group: redis
+            mode: '0640'
+          vars:
+            redis_role: "master"
+            redis_bind: "0.0.0.0"
+            redis_port: "{{ redis_port }}"
+            redis_password: "{{ redis_password }}"
+          notify: Restart Redis
+      when: is_master
+
+    # Configure Redis replicas
+    - name: Configure Redis replicas
+      block:
+        - name: Configure Redis replica
+          template:
+            src: ../templates/redis.conf.j2
+            dest: /etc/redis/redis.conf
+            owner: redis
+            group: redis
+            mode: '0640'
+          vars:
+            redis_role: "replica"
+            redis_bind: "0.0.0.0"
+            redis_port: "{{ redis_port }}"
+            redis_password: "{{ redis_password }}"
+            redis_master_host: "{{ groups['redis_masters'][0] }}"
+            redis_master_port: "{{ redis_port }}"
+          notify: Restart Redis
+      when: is_replica
+
+    # Configure Redis Sentinel
+    - name: Configure Redis Sentinel
+      block:
+        - name: Create Sentinel config directory
+          file:
+            path: /etc/redis-sentinel
+            state: directory
+            owner: redis
+            group: redis
+            mode: '0750'
+
+        - name: Configure Redis Sentinel
+          template:
+            src: ../templates/sentinel.conf.j2
+            dest: /etc/redis-sentinel/sentinel.conf
+            owner: redis
+            group: redis
+            mode: '0640'
+          vars:
+            sentinel_bind: "0.0.0.0"
+            sentinel_port: "{{ sentinel_port }}"
+            redis_master_host: "{{ groups['redis_masters'][0] }}"
+            redis_master_port: "{{ redis_port }}"
+            redis_service_name: "{{ redis_service_name }}"
+            quorum: "{{ quorum }}"
+            redis_password: "{{ redis_password }}"
+          notify: Restart Sentinel
+
+        - name: Create Sentinel systemd service
+          copy:
+            dest: /etc/systemd/system/redis-sentinel.service
+            content: |
+              [Unit]
+              Description=Redis Sentinel
+              After=network.target
+
+              [Service]
+              User=redis
+              Group=redis
+              ExecStart=/usr/bin/redis-server /etc/redis-sentinel/sentinel.conf --sentinel
+              Restart=on-failure
+
+              [Install]
+              WantedBy=multi-user.target
+            owner: root
+            group: root
+            mode: '0644'
+
+        - name: Enable and start Sentinel service
+          systemd:
+            name: redis-sentinel
+            state: started
+            enabled: yes
+            daemon_reload: yes
+      when: is_sentinel
+
+  handlers:
+    - name: Restart Redis
+      service:
+        name: redis-server
+        state: restarted
+
+    - name: Restart Sentinel
+      service:
+        name: redis-sentinel
+        state: restarted

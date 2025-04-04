@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  backend:
+    image: {{ docker_username }}/todo-backend:{{ docker_image_version }}
+    container_name: todo-backend
+    restart: always
+    network_mode: host
+    environment:
+      - DB_NAME={{ db_name }}
+      - DB_USER={{ db_user }}
+      - DB_PASSWORD={{ db_password }}
+      - DB_HOST={{ db_host }}
+      - REDIS_SENTINEL_HOSTS={{ redis_sentinel_hosts }}
+      - REDIS_SENTINEL_PORT={{ redis_sentinel_port }}
+      - REDIS_SERVICE_NAME={{ redis_service_name }}
+      - REDIS_PASSWORD={{ redis_password }}
+      - REDIS_CONNECTION_POOL_SIZE=20
+      - REDIS_CONNECTION_POOL_TIMEOUT=5
+      - REDIS_SOCKET_TIMEOUT=2
+      - REDIS_SOCKET_CONNECT_TIMEOUT=1
+      - REDIS_RETRY_ON_TIMEOUT=true
+      - REDIS_MAX_CONNECTIONS=50
+      - CORS_ALLOW_ORIGINS=*
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

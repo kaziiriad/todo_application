@@ -1,0 +1,7 @@
+---
+all:
+  children:
+    bastion:
+    database_servers:
+    redis_servers:
+    app_servers:

@@ -1,0 +1,17 @@
+---
+# Master playbook that imports all component playbooks
+
+- name: Import bastion playbook
+  import_playbook: bastion.yml
+
+- name: Import database playbook
+  import_playbook: database.yml
+
+- name: Import Redis playbook
+  import_playbook: redis.yml
+
+- name: Import backend playbook
+  import_playbook: backend.yml
+
+- name: Import frontend playbook
+  import_playbook: frontend.yml

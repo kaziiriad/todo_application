@@ -1,0 +1,22 @@
+# Redis Sentinel configuration
+
+# Network
+bind {{ sentinel_bind }}
+port {{ sentinel_port }}
+protected-mode yes
+
+# General
+daemonize yes
+pidfile /var/run/redis/redis-sentinel.pid
+logfile /var/log/redis/redis-sentinel.log
+
+# Sentinel configuration
+sentinel monitor {{ redis_service_name }} {{ redis_master_host }} {{ redis_master_port }} {{ quorum }}
+sentinel auth-pass {{ redis_service_name }} {{ redis_password }}
+sentinel down-after-milliseconds {{ redis_service_name }} 5000
+sentinel failover-timeout {{ redis_service_name }} 60000
+sentinel parallel-syncs {{ redis_service_name }} 1
+
+# Security
+sentinel sentinel-user default
+sentinel sentinel-pass {{ redis_password }}

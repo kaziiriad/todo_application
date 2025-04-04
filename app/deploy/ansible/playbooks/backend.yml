@@ -1,0 +1,82 @@
+---
+# Playbook for configuring backend servers
+
+- name: Configure backend servers
+  hosts: backend_servers
+  become: true
+  vars:
+    docker_username: kaziiriad
+    docker_image_version: dev_deploy
+    db_host: "{{ groups['db_masters'][0] }}"
+    db_user: myuser
+    db_password: mypassword
+    db_name: mydb
+    redis_sentinel_hosts: "{{ groups['redis_sentinels'] | join(',') }}"
+    redis_sentinel_port: 26379
+    redis_service_name: mymaster
+    redis_password: myredispassword
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Docker and dependencies
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - curl
+          - python3-pip
+        state: present
+
+    - name: Install Docker Python module
+      pip:
+        name: docker
+        state: present
+
+    - name: Start and enable Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create docker-compose directory
+      file:
+        path: /home/ubuntu/docker-compose
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Create docker-compose.yml for backend
+      template:
+        src: ../templates/backend-docker-compose.yml.j2
+        dest: /home/ubuntu/docker-compose/docker-compose.yml
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      vars:
+        docker_username: "{{ docker_username }}"
+        docker_image_version: "{{ docker_image_version }}"
+        db_host: "{{ db_host }}"
+        db_user: "{{ db_user }}"
+        db_password: "{{ db_password }}"
+        db_name: "{{ db_name }}"
+        redis_sentinel_hosts: "{{ redis_sentinel_hosts }}"
+        redis_sentinel_port: "{{ redis_sentinel_port }}"
+        redis_service_name: "{{ redis_service_name }}"
+        redis_password: "{{ redis_password }}"
+
+    - name: Pull backend Docker image
+      docker_image:
+        name: "{{ docker_username }}/todo-backend:{{ docker_image_version }}"
+        source: pull
+        force_source: yes
+
+    - name: Start backend containers
+      docker_compose:
+        project_src: /home/ubuntu/docker-compose
+        state: present
+        pull: yes
+        recreate: always
