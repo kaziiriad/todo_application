@@ -4,58 +4,298 @@ services:
       context: ./app/frontend
       dockerfile: Dockerfile
       args:
-        - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+        - BACKEND_URL=${BACKEND_URL:-http://backend-lb:80}
     environment:
-      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - BACKEND_URL=${BACKEND_URL:-http://backend-lb:80}
       - VITE_API_URL=/api
     networks:
       - app-network
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     ports:
       - "80:80"
     
+  # Backend load balancer
+  backend-lb:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/backend.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - "8000:80"
+    networks:
+      - app-network
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      
+  # Backend service without direct port mapping
   backend:
     image: kaziiriad/todo-backend:dev_deploy
     environment:
-      - DB_HOST=postgres
+      - DB_HOST=pgpool
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
       - DB_NAME=mydb
       - DB_PORT=5432
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - DB_CONNECT_RETRIES=30
+      - DB_CONNECT_RETRY_DELAY=5
+      - DB_STARTUP_DELAY=15
+      - REDIS_HOST=redis-sentinel
+      - REDIS_PORT=26379
       - REDIS_DB=0
+      - REDIS_SENTINEL=true
+      - REDIS_SENTINEL_MASTER=mymaster
+      - REDIS_PASSWORD=redis_password
+      - REDIS_SENTINEL_HOSTS=redis-sentinel
     depends_on:
-      - postgres
-      - redis
-    ports:
-      - "8000:8000"
+      pgpool:
+        condition: service_healthy
+      redis-sentinel:
+        condition: service_started
+    # No port mapping - accessible only within Docker network
     networks:
       - app-network
-
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
+    deploy:
+      replicas: 2
+    restart: on-failure
       
-  postgres:
-    image: postgres:15-alpine
+  # PostgreSQL Primary
+  postgres-primary:
+    image: bitnami/postgresql:15
     environment:
-      - POSTGRES_USER=myuser
-      - POSTGRES_PASSWORD=mypassword
-      - POSTGRES_DB=mydb
+      - POSTGRESQL_REPLICATION_MODE=master
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - POSTGRESQL_USERNAME=myuser
+      - POSTGRESQL_PASSWORD=mypassword
+      - POSTGRESQL_DATABASE=mydb
+      # Add these parameters to improve replication stability
+      - POSTGRESQL_SYNCHRONOUS_COMMIT=off
+      - POSTGRESQL_NUM_SYNCHRONOUS_REPLICAS=0
+      - POSTGRESQL_MAX_CONNECTIONS=200
+      # Increase shared buffers for better performance
+      - POSTGRESQL_SHARED_BUFFERS=256MB
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_primary_data:/bitnami/postgresql
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Increase start period to give more time for initialization
+      start_period: 60s
+
+  # PostgreSQL Replica
+  postgres-replica-1:
+    image: bitnami/postgresql:15
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=slave
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - POSTGRESQL_MASTER_HOST=postgres-primary
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_USERNAME=myuser
+      - POSTGRESQL_PASSWORD=mypassword
+      - POSTGRESQL_DATABASE=mydb
+      # Match or exceed primary server parameters
+      - POSTGRESQL_MAX_CONNECTIONS=200
+      # Add these parameters to improve replication stability
+      - POSTGRESQL_SYNCHRONOUS_COMMIT=off
+      # Increase timeout for connecting to master
+      - POSTGRESQL_MASTER_CONNECT_TIMEOUT=60
+      # Add startup delay to ensure primary is ready
+      - POSTGRESQL_INIT_MAX_TIMEOUT=300
+      # Match shared buffers with primary
+      - POSTGRESQL_SHARED_BUFFERS=256MB
+    # No port mapping - accessible only within Docker network
+    volumes:
+      - postgres_replica_1_data:/bitnami/postgresql
+    networks:
+      - app-network
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Increase start period to give more time for initialization
+      start_period: 90s
+    # Use restart policy to handle temporary failures
+    restart: on-failure:3
+    
+  # Second PostgreSQL Replica
+  postgres-replica-2:
+    image: bitnami/postgresql:15
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=slave
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - POSTGRESQL_MASTER_HOST=postgres-primary
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_USERNAME=myuser
+      - POSTGRESQL_PASSWORD=mypassword
+      - POSTGRESQL_DATABASE=mydb
+      # Match or exceed primary server parameters
+      - POSTGRESQL_MAX_CONNECTIONS=200
+      # Add these parameters to improve replication stability
+      - POSTGRESQL_SYNCHRONOUS_COMMIT=off
+      # Increase timeout for connecting to master
+      - POSTGRESQL_MASTER_CONNECT_TIMEOUT=60
+      # Add startup delay to ensure primary is ready
+      - POSTGRESQL_INIT_MAX_TIMEOUT=300
+      # Match shared buffers with primary
+      - POSTGRESQL_SHARED_BUFFERS=256MB
+    # No port mapping - accessible only within Docker network
+    volumes:
+      - postgres_replica_2_data:/bitnami/postgresql
+    networks:
+      - app-network
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Increase start period to give more time for initialization
+      start_period: 90s
+    # Use restart policy to handle temporary failures
+    restart: on-failure:3
+
+  # PgPool for connection pooling and load balancing
+  pgpool:
+    image: bitnami/pgpool:latest
+    environment:
+      # Basic configuration
+      - PGPOOL_ADMIN_USERNAME=admin
+      - PGPOOL_ADMIN_PASSWORD=adminpassword
+      - PGPOOL_POSTGRES_USERNAME=myuser
+      - PGPOOL_POSTGRES_PASSWORD=mypassword
+      - PGPOOL_ENABLE_POOL_PASSWD=yes
+      - PGPOOL_ENABLE_LDAP=no
+      
+      # Backend configuration - use specific container names
+      - PGPOOL_BACKEND_NODES=0:postgres-primary:5432,1:postgres-replica-1:5432,2:postgres-replica-2:5432
+      
+      # Authentication configuration
+      - PGPOOL_SR_CHECK_USER=repl_user
+      - PGPOOL_SR_CHECK_PASSWORD=repl_password
+      - PGPOOL_ENABLE_POOL_HBA=yes
+      
+      # Performance settings
+      - PGPOOL_NUM_INIT_CHILDREN=32
+      - PGPOOL_MAX_POOL=100
+      - PGPOOL_CHILD_MAX_CONNECTIONS=1000
+      - PGPOOL_CHILD_LIFE_TIME=300
+      - PGPOOL_CONNECTION_LIFE_TIME=300
+      - PGPOOL_CLIENT_IDLE_LIMIT=300
+      
+      # Health check settings
+      - PGPOOL_HEALTH_CHECK_PERIOD=10
+      - PGPOOL_HEALTH_CHECK_TIMEOUT=20
+      - PGPOOL_HEALTH_CHECK_MAX_RETRIES=3
+      - PGPOOL_HEALTH_CHECK_RETRY_DELAY=5
+      - PGPOOL_CONNECT_TIMEOUT=10000
+    ports:
+      - "5431:5432"
+    volumes:
+      - pgpool_data:/bitnami/pgpool
+    networks:
+      - app-network
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=mypassword psql -h localhost -U myuser -p 5432 -d mydb -c 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Increase start period to give more time for initialization
+      start_period: 60s
+    # Use restart policy to handle temporary failures
+    restart: on-failure:3
+
+  # Redis Master
+  redis-master:
+    image: bitnami/redis:latest
+    environment:
+      - REDIS_REPLICATION_MODE=master
+      - REDIS_PASSWORD=redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_master_data:/bitnami/redis/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Replicas
+  redis-replica:
+    image: bitnami/redis:latest
+    environment:
+      - REDIS_REPLICATION_MODE=slave
+      - REDIS_MASTER_HOST=redis-master
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_MASTER_PASSWORD=redis_password
+      - REDIS_PASSWORD=redis_password
+    # No port mapping - accessible only within Docker network
+    networks:
+      - app-network
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 2
+
+  # Redis Sentinel for high availability - Single instance approach
+  redis-sentinel:
+    image: bitnami/redis-sentinel:latest
+    environment:
+      - REDIS_MASTER_HOST=redis-master
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_MASTER_PASSWORD=redis_password
+      - REDIS_SENTINEL_QUORUM=2
+      - REDIS_SENTINEL_ANNOUNCE_IP=redis-sentinel
+      - REDIS_SENTINEL_ANNOUNCE_PORT=26379
+    ports:
+      - "26379:26379"
+    networks:
+      - app-network
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
+    # No deploy section to ensure we have just one instance
 
 volumes:
-  postgres_data:
+  postgres_primary_data:
+  postgres_replica_1_data:
+  postgres_replica_2_data:
+  pgpool_data:
+  redis_master_data:
 
 networks:
   app-network:

@@ -48,39 +48,61 @@ class RedisManager:
             retry_on_timeout: Whether to retry on timeout
             *args, **kwargs: Additional arguments passed to Sentinel
         """
+        # Get configuration from environment variables with fallbacks
         if sentinel_hosts is None:
-            sentinel_hosts = ['localhost']
+            # Use environment variable or default to redis-sentinel service name
+            sentinel_host = os.environ.get('REDIS_HOST', 'redis-sentinel')
+            sentinel_hosts = [sentinel_host]
         
-        logger.info(f"Initializing Redis Sentinel connection to {sentinel_hosts}")
-            
-        sentinel = Sentinel(
-            [(host, sentinel_port) for host in sentinel_hosts], 
-            socket_timeout=socket_connect_timeout,
-            password=password,
-            decode_responses=True, 
-            retry_on_timeout=retry_on_timeout,
-            **kwargs
-        )
+        sentinel_port = int(os.environ.get('REDIS_PORT', sentinel_port))
+        service_name = os.environ.get('REDIS_SENTINEL_MASTER', service_name)
+        password = os.environ.get('REDIS_PASSWORD', password)
         
-        self.master = sentinel.master_for(
-            service_name, 
-            socket_timeout=socket_timeout,
-            retry_on_timeout=retry_on_timeout
-        )
+        logger.info(f"Initializing Redis Sentinel connection to {sentinel_hosts} for master {service_name}")
         
-        self.slave = sentinel.slave_for(
-            service_name, 
-            socket_timeout=socket_timeout,
-            retry_on_timeout=retry_on_timeout
-        )
+        # Add retry logic for initial connection
+        max_retries = 5
+        retry_delay = 3  # seconds
         
-        # Test connection
-        try:
-            self.ping()
-            logger.info("Successfully connected to Redis via Sentinel")
-        except Exception as e:
-            logger.error(f"Failed to connect to Redis via Sentinel: {e}")
-            raise
+        for attempt in range(1, max_retries + 1):
+            try:
+                sentinel = Sentinel(
+                    [(host, sentinel_port) for host in sentinel_hosts], 
+                    socket_timeout=socket_connect_timeout,
+                    password=password,
+                    decode_responses=True,
+                    retry_on_timeout=retry_on_timeout,
+                    **kwargs
+                )
+                
+                self.master = sentinel.master_for(
+                    service_name, 
+                    socket_timeout=socket_timeout,
+                    password=password,
+                    decode_responses=True,
+                    retry_on_timeout=retry_on_timeout
+                )
+                
+                self.slave = sentinel.slave_for(
+                    service_name, 
+                    socket_timeout=socket_timeout,
+                    password=password,
+                    decode_responses=True,
+                    retry_on_timeout=retry_on_timeout
+                )
+                
+                # Test connection
+                self.ping()
+                logger.info(f"Successfully connected to Redis via Sentinel on attempt {attempt}")
+                break
+                
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Redis connection attempt {attempt} failed: {e}. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Failed to connect to Redis via Sentinel after {max_retries} attempts: {e}")
+                    raise
         
     def set(self, key: str, value: Any, expire: Optional[int] = None) -> bool:
         """
@@ -95,7 +117,9 @@ class RedisManager:
             bool: Success status
         """
         try:
-            self.master.set(key, json.dumps(value), ex=expire)
+            # Convert value to JSON string
+            json_value = json.dumps(value)
+            self.master.set(key, json_value, ex=expire)
             return True
         except Exception as e:
             logger.error(f"Redis SET error for key {key}: {e}")
@@ -113,14 +137,31 @@ class RedisManager:
             The deserialized value or None if not found/error
         """
         try:
-            value = self.slave.get(key)  # Read from slave for better read distribution
-            return json.loads(value.decode('utf-8')) if value else None # type: ignore
+            # Try to get from slave first
+            value = self.slave.get(key)
+            
+            # If value exists, parse JSON
+            if value:
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError:
+                    # If not valid JSON, return as is
+                    return value
+            return None
+            
         except Exception as e:
             logger.warning(f"Slave read failed for key {key}, falling back to master: {e}")
+            
             # Fallback to master if slave read fails
             try:
                 value = self.master.get(key)
-                return json.loads(value.decode('utf-8')) if value else None # type: ignore
+                if value:
+                    try:
+                        return json.loads(value)
+                    except json.JSONDecodeError:
+                        # If not valid JSON, return as is
+                        return value
+                return None
             except Exception as e:
                 logger.error(f"Redis GET error for key {key}: {e}")
                 return None
@@ -254,7 +295,7 @@ class RedisManager:
 
 class DatabaseManager:
     """
-    Manages database connections with master-replica setup.
+    Manages database connections with master-replica setup via pgpool.
     Provides connection pooling and automatic failover.
     """
     
@@ -264,12 +305,13 @@ class DatabaseManager:
         Configuration is read from environment variables.
         """
         # Get database configuration from environment variables
-        self.db_host = os.environ.get('DB_HOST', '').strip()
+        self.db_host = os.environ.get('DB_HOST', 'pgpool').strip()
         if not self.db_host:
             raise ValueError("DB_HOST environment variable is not set.")
-        self.db_user = os.environ.get('DB_USER')
-        self.db_password = os.environ.get('DB_PASSWORD')
-        self.db_name = os.environ.get('DB_NAME')
+        self.db_user = os.environ.get('DB_USER', 'myuser')
+        self.db_password = os.environ.get('DB_PASSWORD', 'mypassword')
+        self.db_name = os.environ.get('DB_NAME', 'mydb')
+        self.db_port = int(os.environ.get('DB_PORT', '5432'))
         
         # Optional replica configuration
         self.replica_hosts = [host.strip() for host in os.environ.get('DB_REPLICA_HOSTS', '').split(',') if host.strip()]
@@ -278,39 +320,146 @@ class DatabaseManager:
         self.min_conn = int(os.environ.get('DB_MIN_CONNECTIONS', '1'))
         self.max_conn = int(os.environ.get('DB_MAX_CONNECTIONS', '10'))
         
-        # Initialize connection pools
-        if not self.db_host:
-            raise ValueError("DB_HOST environment variable is not set.")
-        self.master_pool = self._create_connection_pool(self.db_host)
+        # Retry settings
+        self.max_retries = int(os.environ.get('DB_CONNECT_RETRIES', '30'))
+        self.retry_delay = int(os.environ.get('DB_CONNECT_RETRY_DELAY', '5'))
         
-        # Create replica pools if replica hosts are provided
-        self.replica_pools = {}
-        for host in self.replica_hosts:
-            if host and host.strip():
-                self.replica_pools[host] = self._create_connection_pool(host.strip())
+        # Initial startup delay to allow database services to initialize
+        self._apply_startup_delay()
         
-        logger.info(f"Database manager initialized with master: {self.db_host} and replicas: {self.replica_hosts}")
+        # Initialize connection pools with retry logic
+        self._initialize_connection_pools()
+        
+    def _apply_startup_delay(self):
+        """
+        Apply an initial delay to allow database services to fully initialize.
+        This helps prevent connection issues during container orchestration startup.
+        """
+        startup_delay = int(os.environ.get('DB_STARTUP_DELAY', '10'))
+        if startup_delay > 0:
+            logger.info(f"Applying initial startup delay of {startup_delay} seconds to allow database services to initialize...")
+            time.sleep(startup_delay)
     
-    def _create_connection_pool(self, host: str) -> ThreadedConnectionPool:
+    def _wait_for_service(self, host: str, port: int, timeout: int = 30) -> bool:
+        """
+        Wait for a TCP service to become available.
+        
+        Args:
+            host: Service hostname
+            port: Service port
+            timeout: Maximum time to wait in seconds
+            
+        Returns:
+            bool: True if service is available, False otherwise
+        """
+        logger.info(f"Waiting for service at {host}:{port} to become available (timeout: {timeout}s)...")
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                with socket.create_connection((host, port), timeout=2):
+                    logger.info(f"Service at {host}:{port} is available")
+                    return True
+            except (socket.timeout, ConnectionRefusedError, OSError):
+                time.sleep(1)
+        
+        logger.warning(f"Service at {host}:{port} did not become available within {timeout} seconds")
+        return False
+        
+    def _initialize_connection_pools(self):
+        """
+        Initialize connection pools with retry logic.
+        Attempts to connect to the database with exponential backoff.
+        """
+        logger.info(f"Initializing database connection pools with {self.max_retries} retries")
+        
+        # First, wait for the pgpool service to be available at TCP level
+        self._wait_for_service(self.db_host, self.db_port, timeout=60)
+        
+        # Initialize master pool with retries
+        retry_count = 0
+        last_error = None
+        self.master_pool = None
+        
+        while retry_count < self.max_retries and self.master_pool is None:
+            try:
+                logger.info(f"Attempting to connect to database at {self.db_host} (attempt {retry_count + 1}/{self.max_retries})")
+                
+                # Try with different application_name values to help pgpool identify the connection
+                try:
+                    self.master_pool = self._create_connection_pool(
+                        self.db_host, 
+                        application_name="backend_master"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed first connection attempt with application_name: {e}")
+                    # Try without application_name as fallback
+                    self.master_pool = self._create_connection_pool(self.db_host)
+                
+                # Test the connection with a simple query
+                with self.master_pool.getconn() as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT 1")
+                        cursor.fetchone()
+                    self.master_pool.putconn(conn)
+                
+                logger.info(f"Successfully connected to database at {self.db_host}")
+                break
+                
+            except Exception as e:
+                last_error = e
+                retry_count += 1
+                
+                if retry_count < self.max_retries:
+                    # Use exponential backoff with a cap
+                    delay = min(self.retry_delay * (2 ** (retry_count - 1)), 60)
+                    logger.warning(f"Failed to connect to database: {e}. Retrying in {delay} seconds... (attempt {retry_count}/{self.max_retries})")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"Failed to connect to database after {self.max_retries} attempts: {e}")
+        
+        if self.master_pool is None:
+            raise Exception(f"Failed to connect to database after {self.max_retries} attempts: {last_error}")
+        
+        # For pgpool setup, we don't need separate replica pools as pgpool handles that
+        self.replica_pools = {}
+        
+        logger.info(f"Database manager initialized with connection to pgpool at {self.db_host}")
+    
+    def _create_connection_pool(self, host: str, **extra_params) -> ThreadedConnectionPool:
         """
         Create a connection pool for a specific database host.
         
         Args:
             host: Database host address
+            **extra_params: Additional connection parameters
             
         Returns:
             ThreadedConnectionPool: Connection pool for the specified host
         """
         try:
-            pool = ThreadedConnectionPool(
-                minconn=self.min_conn,
-                maxconn=self.max_conn,
-                host=host,
-                user=self.db_user,
-                password=self.db_password,
-                database=self.db_name,
-                cursor_factory=RealDictCursor
-            )
+            # Connection parameters optimized for pgpool
+            conn_params = {
+                "minconn": self.min_conn,
+                "maxconn": self.max_conn,
+                "host": host,
+                "port": self.db_port,
+                "user": self.db_user,
+                "password": self.db_password,
+                "database": self.db_name,
+                "cursor_factory": RealDictCursor,
+                "connect_timeout": 10,  # 10 seconds timeout for connection attempts
+                "options": "-c statement_timeout=30000",  # 30 second statement timeout
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            }
+            
+            # Add any extra parameters
+            conn_params.update(extra_params)
+            
+            # Create the connection pool
+            pool = ThreadedConnectionPool(**conn_params)
             logger.info(f"Created connection pool for {host}")
             return pool
         except Exception as e:
@@ -320,9 +469,9 @@ class DatabaseManager:
     @contextmanager
     def get_connection(self, read_only: bool = False) -> Iterator[Tuple[Any, bool]]:
         """
-        Get a database connection from the appropriate pool.
-        For read-only operations, tries to get a connection from a replica pool first.
-        Falls back to master if no replicas are available or if they fail.
+        Get a database connection from the pool.
+        With pgpool, all connections go through the same pool, but we can set
+        session variables to indicate read-only intent.
         
         Args:
             read_only: Whether the connection will be used for read-only operations
@@ -334,20 +483,17 @@ class DatabaseManager:
         is_master = True
         
         try:
-            # For read-only operations, try to get a connection from a replica pool first
-            if read_only and self.replica_pools:
-                for host, pool in self.replica_pools.items():
-                    try:
-                        conn = pool.getconn()
-                        is_master = False
-                        break
-                    except Exception as e:
-                        logger.warning(f"Failed to get connection from replica {host}: {e}")
+            # Get connection from the pool
+            conn = self.master_pool.getconn()
             
-            # If no replica connection was obtained or if write access is needed, use master
-            if conn is None:
-                conn = self.master_pool.getconn()
-                is_master = True
+            # For read-only operations, set the session to use replicas via pgpool
+            if read_only:
+                with conn.cursor() as cursor:
+                    # This tells pgpool to use a replica if available
+                    cursor.execute("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;")
+                    # Additional pgpool-specific setting if needed
+                    # cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;")
+                is_master = False
             
             yield (conn, is_master)
             
@@ -357,16 +503,14 @@ class DatabaseManager:
             
         finally:
             if conn is not None:
-                if is_master:
+                try:
+                    # Reset any session variables before returning to pool
+                    if read_only:
+                        with conn.cursor() as cursor:
+                            cursor.execute("RESET SESSION CHARACTERISTICS;")
                     self.master_pool.putconn(conn)
-                else:
-                    for pool in self.replica_pools.values():
-                        try:
-                            pool.putconn(conn)
-                            break
-                        except Exception:
-                            # This connection doesn't belong to this pool, try the next one
-                            pass
+                except Exception as e:
+                    logger.error(f"Error returning connection to pool: {e}")
     
     @contextmanager
     def get_cursor(self, read_only: bool = False):
@@ -384,7 +528,7 @@ class DatabaseManager:
             try:
                 yield cursor, is_master
                 if not is_master:
-                    # For replica connections, we don't commit changes
+                    # For read-only connections, we don't commit changes
                     pass
                 else:
                     # For master connections, commit the transaction
@@ -431,40 +575,32 @@ class DatabaseManager:
     
     def health_check(self) -> Dict[str, bool]:
         """
-        Check the health of all database connections.
+        Check the health of database connections.
         
         Returns:
             Dictionary with host as key and health status as value
         """
         health = {self.db_host: False}
         
-        # Check master
+        # Check connection through pgpool
         try:
             with self.get_connection(read_only=False) as (conn, _):
                 with conn.cursor() as cursor:
                     cursor.execute("SELECT 1")
                     health[self.db_host] = True
-        except Exception as e:
-            logger.error(f"Master database health check failed: {e}")
-        
-        # Check replicas
-        for host in self.replica_hosts:
-            health[host] = False
-            if host in self.replica_pools:
-                try:
-                    pool = self.replica_pools[host]
-                    conn = pool.getconn()
+                    
+                    # Try to get pgpool status if possible
                     try:
-                        with conn.cursor() as cursor:
-                            cursor.execute("SELECT 1")
-                            health[host] = True
-                    finally:
-                        pool.putconn(conn)
-                except Exception as e:
-                    logger.error(f"Replica {host} health check failed: {e}")
+                        cursor.execute("SHOW pool_nodes")
+                        nodes = cursor.fetchall()
+                        for node in nodes:
+                            logger.info(f"PgPool node status: {node}")
+                    except Exception as e:
+                        logger.warning(f"Could not query pgpool status: {e}")
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
             
-        return {key: value for key, value in health.items() if key is not None}
-        
+        return health
 
 # Singleton instance
 db_manager = DatabaseManager()

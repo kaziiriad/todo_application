@@ -8,12 +8,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 # from mailer import send_invite_email
+from config import settings
 from models import RoomCreate, RoomResponse, TaskCreate, TaskUpdate, TaskResponse, RoomInviteRequest, RoomJoinRequest
 from manager import RedisManager, db_manager
 from database import (
     Task,
     get_db,
-    DATABASE_URL,
     Room,
     RoomParticipant,
 )  # Assuming TaskBase is renamed to Task for clarity
@@ -21,11 +21,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import socketio
 
-REDIS_SENTINEL_HOSTS = os.getenv("REDIS_SENTINEL_HOSTS", "localhost")
-REDIS_SENTINEL_PORT = os.getenv("REDIS_SENTINEL_PORT", 26379)
-REDIS_SERVICE_NAME = os.getenv("REDIS_SERVICE_NAME", "mymaster")
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
-REDIS_DB = os.getenv("REDIS_DB", 0)
+# REDIS_SENTINEL_HOSTS = os.getenv("REDIS_SENTINEL_HOSTS", "localhost")
+# REDIS_SENTINEL_PORT = os.getenv("REDIS_SENTINEL_PORT", 26379)
+# REDIS_SERVICE_NAME = os.getenv("REDIS_SERVICE_NAME", "mymaster")
+# REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+# REDIS_DB = os.getenv("REDIS_DB", 0)
 
 app = FastAPI(
     title="TODO API", description="REST API for managing tasks", version="1.0.0"
@@ -43,10 +43,10 @@ app.add_middleware(
 )
 
 redis_manager = RedisManager(
-    sentinel_hosts=REDIS_SENTINEL_HOSTS.split(","),
-    sentinel_port=(REDIS_SENTINEL_PORT if isinstance(REDIS_SENTINEL_PORT, int) else int(REDIS_SENTINEL_PORT)),
-    service_name=REDIS_SERVICE_NAME,
-    password=REDIS_PASSWORD,
+    sentinel_hosts=settings.REDIS_SENTINEL_HOSTS.split(","),
+    sentinel_port=(settings.REDIS_SENTINEL_PORT if isinstance(settings.REDIS_SENTINEL_PORT, int) else int(settings.REDIS_SENTINEL_PORT)),
+    service_name=settings.REDIS_SERVICE_NAME,
+    password=settings.REDIS_PASSWORD,
     socket_timeout=0.5,
     socket_connect_timeout=1.0,
 )
@@ -453,7 +453,7 @@ async def health():
     # Check database connection
     try:
         from sqlalchemy import create_engine
-        engine = create_engine(DATABASE_URL)
+        engine = create_engine(setting.DATABASE_URL)
         with engine.connect() as connection:
             result = connection.execute(text("SELECT 1"))
             result.fetchone()  # Actually execute the query

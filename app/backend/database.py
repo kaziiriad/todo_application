@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, create_engine, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Boolean, create_engine, Column, Integer, String, DateTime, ForeignKey, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from datetime import datetime, timezone, timedelta
@@ -8,19 +8,19 @@ from typing import Generator, Optional
 from sqlalchemy.exc import SQLAlchemyError
 import time
 import logging
-
+from config import settings
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Database configuration
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_USER = os.getenv('DB_USER', 'myuser')
-DB_PORT = os.getenv('DB_PORT', '5432')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'mypassword')
-DB_NAME = os.getenv('DB_NAME', 'mydb')
+# DB_HOST = os.getenv('DB_HOST', 'localhost')
+# DB_USER = os.getenv('DB_USER', 'myuser')
+# DB_PORT = os.getenv('DB_PORT', '5432')
+# DB_PASSWORD = os.getenv('DB_PASSWORD', 'mypassword')
+# DB_NAME = os.getenv('DB_NAME', 'mydb')
 
-DATABASE_URL = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+# DATABASE_URL = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
 
 Base = declarative_base()
 
@@ -43,7 +43,7 @@ def get_engine(max_retries=5, retry_interval=5):
         try:
             logger.info(f"Attempting to connect to database (attempt {retries+1}/{max_retries})...")
             engine = create_engine(
-                DATABASE_URL,
+                settings.DATABASE_URL,
                 pool_pre_ping=True,
                 pool_size=5,
                 max_overflow=10
@@ -313,8 +313,38 @@ class Task(Base):
     # room = relationship("Room", back_populates="tasks")
     # user = relationship("User")  # Task owner
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
+# Function to check if tables exist before creating them
+def initialize_database():
+    """
+    Initialize the database by creating tables if they don't exist.
+    Uses a safer approach to prevent errors when tables already exist.
+    """
+    try:
+        # Check if tables already exist
+        inspector = inspect(engine)
+        existing_tables = inspector.get_table_names()
+        
+        # Get all model table names
+        model_tables = [table.__tablename__ for table in Base.__subclasses__()]
+        
+        if set(model_tables).issubset(set(existing_tables)):
+            logger.info("All tables already exist, skipping table creation")
+            return
+        
+        # Create tables that don't exist
+        logger.info("Creating database tables...")
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Error initializing database: {e}")
+        raise
+
+# Create tables if they don't exist
+try:
+    initialize_database()
+except Exception as e:
+    logger.error(f"Failed to initialize database: {e}")
 
 def get_db() -> Generator[Session, None, None]:
     """
